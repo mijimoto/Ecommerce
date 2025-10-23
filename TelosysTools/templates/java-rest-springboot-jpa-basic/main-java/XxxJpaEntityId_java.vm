@@ -1,0 +1,38 @@
+
+## --------------------------------------------------
+#if ( $entity.isJoinEntity() )
+#cancel("No DTO class for join entity")
+#end
+## --------------------------------------------------
+#checkId($entity)
+#parse("include/init_var_entity.vm")
+#parse("include/java_header.vm")
+##--------------------------------------------------------------------------------------------------------
+package ${target.javaPackageFromFolder($SRC)};
+
+import java.io.Serializable;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+#foreach( $import in $java.imports($entity.keyAttributes) )
+import $import;
+#end
+
+/**
+ * Composite primary key for entity "${entity.name}" ( stored in table "${entity.databaseTable}" )
+ *
+ * @author Telosys
+ */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class $jpaEntityIdClass implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    //--- ENTITY KEY ATTRIBUTES 
+#foreach( $field in $entity.keyAttributes )
+    private $field.formattedType(10) $field.name;
+#end
+
+}

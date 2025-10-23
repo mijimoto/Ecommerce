@@ -1,0 +1,124 @@
+## --------------------------------------------------
+#if ( $entity.isJoinEntity() )
+#cancel("No SERVICE class for join entity")
+#end
+## --------------------------------------------------
+#checkId($entity)
+#using("REST_API_ROOT")
+#parse("include/init_var_entity.vm")
+
+##---------------------------------------------------------------------------------------
+package ${target.javaPackageFromFolder(${SRC})};
+
+#foreach( $import in $java.imports($entity.keyAttributes) )
+import $import;
+#end
+import java.math.BigDecimal;
+import java.util.List;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import ${ROOT_PKG}.rest.dto.${dtoClass};
+import ${ROOT_PKG}.rest.services.${serviceClass};
+
+## ---- Build REST path and @PathVariable declarations for all ID fields ----
+#set($REST_PATH_FOR_ID = "")
+#set($REST_PARAM_FOR_ID = "")
+#set($ID_ARGS = "")
+#set($sep = "")
+#foreach( $key in $entity.keyAttributes )
+  #set($REST_PATH_FOR_ID = "${REST_PATH_FOR_ID}/{${key.name}}")
+  #set($REST_PARAM_FOR_ID = "${REST_PARAM_FOR_ID}${sep}@PathVariable ${key.type} ${key.name}")
+  #set($ID_ARGS = "${ID_ARGS}${sep}${key.name}")
+  #set($sep = ", ")
+#end
+
+@CrossOrigin(origins = "*")
+@RestController
+@RequestMapping(value = "${REST_API_ROOT}/${fn.toLowerCase($entity.name)}", produces = MediaType.APPLICATION_JSON_VALUE)
+public class ${controllerClass} {
+
+    private static final Logger logger = LoggerFactory.getLogger(${controllerClass}.class);
+
+    private final ${serviceClass} service;
+
+    @Autowired
+    public ${controllerClass}(${serviceClass} service) {
+        this.service = service;
+    }
+
+    @GetMapping
+    public ResponseEntity<List<${dtoClass}>> findAll(
+            @RequestParam(defaultValue = "1") int pageNumber,
+            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(required = false) String searchName,
+            @RequestParam(required = false) BigDecimal minPrice,
+            @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(defaultValue = "PartName") String sortBy,
+            @RequestParam(defaultValue = "ASC") String sortDirection
+    ) {
+        logger.debug("GET - findAll with pagination & filters");
+        List<${dtoClass}> list = service.findAll(pageNumber, pageSize, searchName, minPrice, maxPrice, sortBy, sortDirection);
+        return ResponseEntity.ok(list);
+    }
+
+    @GetMapping("${REST_PATH_FOR_ID}")
+    public ResponseEntity<${dtoClass}> findById($REST_PARAM_FOR_ID) {
+        logger.debug("GET - findById");
+        ${dtoClass} dto = service.findById($ID_ARGS);
+        return (dto != null) ? ResponseEntity.ok(dto) : ResponseEntity.notFound().build();
+    }
+
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Void> create(@RequestBody ${dtoClass} ${fn.uncapitalize($entity.name)}DTO) {
+        logger.debug("POST - create");
+        if (service.create(${fn.uncapitalize($entity.name)}DTO)) {
+            return ResponseEntity.status(HttpStatus.CREATED).build();
+        } else {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+    }
+
+    @PutMapping(value = "${REST_PATH_FOR_ID}")
+    public ResponseEntity<Void> save($REST_PARAM_FOR_ID, @RequestBody ${dtoClass} ${fn.uncapitalize($entity.name)}DTO) {
+        logger.debug("PUT - save");
+        service.save($ID_ARGS, ${fn.uncapitalize($entity.name)}DTO);
+        return ResponseEntity.ok().build();
+    }
+
+    @PutMapping
+    public ResponseEntity<Void> update(@RequestBody ${dtoClass} ${fn.uncapitalize($entity.name)}DTO) {
+        logger.debug("PUT - update");
+        if (service.update(${fn.uncapitalize($entity.name)}DTO)) {
+            return ResponseEntity.ok().build();
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @PatchMapping(value = "${REST_PATH_FOR_ID}", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Void> partialUpdate($REST_PARAM_FOR_ID, @RequestBody ${dtoClass} ${fn.uncapitalize($entity.name)}DTO) {
+        logger.debug("PATCH - partialUpdate");
+        if (service.partialUpdate($ID_ARGS, ${fn.uncapitalize($entity.name)}DTO)) {
+            return ResponseEntity.ok().build();
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @DeleteMapping("${REST_PATH_FOR_ID}")
+    public ResponseEntity<Void> deleteById($REST_PARAM_FOR_ID) {
+        logger.debug("DELETE - deleteById");
+        if (service.deleteById($ID_ARGS)) {
+            return ResponseEntity.noContent().build();
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+}

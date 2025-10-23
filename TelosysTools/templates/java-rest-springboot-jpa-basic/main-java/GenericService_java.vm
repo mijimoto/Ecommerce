@@ -1,0 +1,273 @@
+#parse("include/java_header.vm")
+##---------------------------------------------------------------------------------------
+package ${target.javaPackageFromFolder(${SRC})};
+## package org.demo.myapp.rest.services.commons;
+
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Optional;
+
+import org.modelmapper.ModelMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.BeanUtils;
+
+/**
+ * Abstract class for REST services <br>
+ * Enhanced with better entity-DTO conversion and error handling <br>
+ * 
+ * @author Telosys
+ *
+ * @param <ENTITY>
+ * @param <DTO>
+ */
+public abstract class GenericService<ENTITY, DTO> {
+
+	private static final Logger logger = LoggerFactory.getLogger(GenericService.class);
+	
+	private final ModelMapper mapper = new ModelMapper();
+
+	private final Class<ENTITY> entityClass;
+	private final Class<DTO> dtoClass;
+
+	/**
+	 * Constructor
+	 * 
+	 * @param entityClass
+	 * @param dtoClass
+	 */
+	protected GenericService(Class<ENTITY> entityClass, Class<DTO> dtoClass) {
+		super();
+		this.entityClass = entityClass;
+		this.dtoClass = dtoClass;
+		configureMapper();
+	}
+
+	/**
+	 * Configure ModelMapper for better conversion handling
+	 */
+	private void configureMapper() {
+		// Configure mapper to handle null values properly
+		mapper.getConfiguration()
+			.setSkipNullEnabled(true)
+			.setFieldMatchingEnabled(true)
+			.setFieldAccessLevel(org.modelmapper.config.Configuration.AccessLevel.PRIVATE);
+	}
+
+	/**
+	 * Converts DTO to JPA ENTITY
+	 * 
+	 * @param dto
+	 * @return
+	 */
+	protected ENTITY dtoToEntity(DTO dto) {
+		if (dto == null) {
+			return null;
+		}
+		try {
+			return mapper.map(dto, entityClass);
+		} catch (Exception e) {
+			logger.error("Error converting DTO to Entity: {}", e.getMessage());
+			// Fallback to BeanUtils if ModelMapper fails
+			try {
+				ENTITY entity = entityClass.getDeclaredConstructor().newInstance();
+				BeanUtils.copyProperties(dto, entity);
+				return entity;
+			} catch (Exception fallbackException) {
+				logger.error("Fallback conversion also failed: {}", fallbackException.getMessage());
+				throw new RuntimeException("Failed to convert DTO to Entity", fallbackException);
+			}
+		}
+	}
+
+	/**
+	 * Converts JPA ENTITY to DTO
+	 * 
+	 * @param entity
+	 * @return
+	 */
+	protected DTO entityToDto(ENTITY entity) {
+		if (entity == null) {
+			return null;
+		}
+		try {
+			return mapper.map(entity, dtoClass);
+		} catch (Exception e) {
+			logger.error("Error converting Entity to DTO: {}", e.getMessage());
+			// Fallback to BeanUtils if ModelMapper fails
+			try {
+				DTO dto = dtoClass.getDeclaredConstructor().newInstance();
+				BeanUtils.copyProperties(entity, dto);
+				return dto;
+			} catch (Exception fallbackException) {
+				logger.error("Fallback conversion also failed: {}", fallbackException.getMessage());
+				throw new RuntimeException("Failed to convert Entity to DTO", fallbackException);
+			}
+		}
+	}
+
+	/**
+	 * Converts an Optional JPA ENTITY to DTO
+	 * 
+	 * @param optionalEntity
+	 * @return the DTO or null if nothing in optional
+	 */
+	protected DTO entityToDto(Optional<ENTITY> optionalEntity) {
+		if (optionalEntity.isPresent()) {
+			return entityToDto(optionalEntity.get());
+		} else {
+			return null;
+		}
+	}
+
+	/**
+	 * Converts a collection of JPA ENTITIES to a collection of DTO
+	 * 
+	 * @param entities
+	 * @return
+	 */
+	protected List<DTO> entityListToDtoList(Iterable<ENTITY> entities) {
+		List<DTO> dtoList = new LinkedList<>();
+		if (entities != null) {
+			for (ENTITY e : entities) {
+				DTO dto = entityToDto(e);
+				if (dto != null) {
+					dtoList.add(dto);
+				}
+			}
+		}
+		return dtoList;
+	}
+
+	/**
+	 * Converts a collection of DTOs to a collection of JPA ENTITIES
+	 * 
+	 * @param dtos
+	 * @return
+	 */
+	protected List<ENTITY> dtoListToEntityList(Iterable<DTO> dtos) {
+		List<ENTITY> entityList = new LinkedList<>();
+		if (dtos != null) {
+			for (DTO dto : dtos) {
+				ENTITY entity = dtoToEntity(dto);
+				if (entity != null) {
+					entityList.add(entity);
+				}
+			}
+		}
+		return entityList;
+	}
+
+	/**
+	 * Updates an existing entity with values from DTO, ignoring null values
+	 * 
+	 * @param existingEntity the entity to update
+	 * @param dto the DTO containing new values
+	 * @return the updated entity
+	 */
+	protected ENTITY updateEntityFromDto(ENTITY existingEntity, DTO dto) {
+		if (existingEntity == null || dto == null) {
+			return existingEntity;
+		}
+		
+		try {
+			// Use ModelMapper to update only non-null properties
+			mapper.map(dto, existingEntity);
+			return existingEntity;
+		} catch (Exception e) {
+			logger.error("Error updating entity from DTO: {}", e.getMessage());
+			// Fallback to BeanUtils with null-aware copying
+			try {
+				BeanUtils.copyProperties(dto, existingEntity, getNullPropertyNames(dto));
+				return existingEntity;
+			} catch (Exception fallbackException) {
+				logger.error("Fallback update also failed: {}", fallbackException.getMessage());
+				throw new RuntimeException("Failed to update entity from DTO", fallbackException);
+			}
+		}
+	}
+
+	/**
+	 * Helper method to get property names that are null in the source object
+	 * Used for excluding null properties during BeanUtils.copyProperties
+	 * 
+	 * @param source
+	 * @return array of null property names
+	 */
+	private String[] getNullPropertyNames(Object source) {
+		final org.springframework.beans.BeanWrapper src = new org.springframework.beans.BeanWrapperImpl(source);
+		java.beans.PropertyDescriptor[] pds = src.getPropertyDescriptors();
+
+		java.util.Set<String> emptyNames = new java.util.HashSet<>();
+		for (java.beans.PropertyDescriptor pd : pds) {
+			Object srcValue = src.getPropertyValue(pd.getName());
+			if (srcValue == null) {
+				emptyNames.add(pd.getName());
+			}
+		}
+		String[] result = new String[emptyNames.size()];
+		return emptyNames.toArray(result);
+	}
+
+	/**
+	 * Validates that all required fields in DTO are not null/empty
+	 * Override this method in concrete services to add specific validation
+	 * 
+	 * @param dto
+	 * @throws IllegalArgumentException if validation fails
+	 */
+	protected void validateDto(DTO dto) {
+		if (dto == null) {
+			throw new IllegalArgumentException("DTO cannot be null");
+		}
+		// Override in concrete services for specific validation
+	}
+
+	/**
+	 * Validates that the entity exists in the database
+	 * 
+	 * @param entityId
+	 * @param repository
+	 * @return true if exists, false otherwise
+	 */
+	protected boolean validateEntityExists(Object entityId, org.springframework.data.repository.CrudRepository<ENTITY, Object> repository) {
+		if (entityId == null) {
+			return false;
+		}
+		return repository.existsById(entityId);
+	}
+
+	/**
+	 * Logs the operation being performed for debugging
+	 * 
+	 * @param operation
+	 * @param entityClass
+	 * @param identifier
+	 */
+	protected void logOperation(String operation, Class<?> entityClass, Object identifier) {
+		logger.debug("Operation: {} on {} with identifier: {}", 
+			operation, entityClass.getSimpleName(), identifier);
+	}
+
+	/**
+	 * Creates a standardized error message for foreign key validation failures
+	 * 
+	 * @param entityName
+	 * @param entityId
+	 * @return formatted error message
+	 */
+	protected String createForeignKeyErrorMessage(String entityName, Object entityId) {
+		return String.format("Referenced %s with ID '%s' does not exist", entityName, entityId);
+	}
+
+	/**
+	 * Creates a standardized error message for entity not found scenarios
+	 * 
+	 * @param entityName
+	 * @param entityId
+	 * @return formatted error message
+	 */
+	protected String createEntityNotFoundErrorMessage(String entityName, Object entityId) {
+		return String.format("%s with ID '%s' was not found", entityName, entityId);
+	}
+}

@@ -1,0 +1,23 @@
+# Maven build output
+/target/
+
+# Gradle build output
+/build/
+
+# IDE files
+*.iml
+.idea/
+.vscode/
+*.classpath
+*.project
+*.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp

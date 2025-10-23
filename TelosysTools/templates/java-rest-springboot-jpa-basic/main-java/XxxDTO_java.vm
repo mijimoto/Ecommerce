@@ -1,0 +1,51 @@
+## --------------------------------------------------
+#if ( $entity.isJoinEntity() )
+#cancel("No DTO class for join entity")
+#end
+## --------------------------------------------------
+#checkId($entity)
+#parse("include/init_var_entity.vm")
+#parse("include/java_header.vm")
+##---------------------------------------------------------------------------------------
+#macro( dtoName $attr )
+  #if($attr.name.equals("interface"))iface#else$attr.name#end
+#end
+##----------------------------------------------------------------------------------
+package ${target.javaPackageFromFolder(${SRC})};
+
+import java.io.Serializable;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+#foreach( $import in $java.imports($entity) )
+import $import;
+#end
+
+/**
+ * DTO class for "${entity.name}"
+ *
+ * @author Telosys
+ */
+@Data
+@NoArgsConstructor
+public class ${dtoClass} implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    //--- PRIMARY KEY 
+#foreach( $attribute in $entity.keyAttributes )
+    private $attribute.type $attribute.name#if($attribute.hasInitialValue()) = ${attribute.initialValue}#end;
+#end
+
+    //--- OTHER DATA FIELDS 
+#foreach( $attribute in $entity.nonKeyAttributes )
+    private $attribute.type #dtoName($attribute)#if($attribute.hasInitialValue()) = ${attribute.initialValue}#end;
+#end
+
+#if ( $entity.hasLinks() )
+    //--- LINKS ( RELATIONSHIPS )
+#foreach( $link in $entity.links )
+    private $link.fieldType.replace($link.targetEntitySimpleType, "${link.targetEntitySimpleType}DTO") $link.fieldName;
+#end
+#end
+
+}

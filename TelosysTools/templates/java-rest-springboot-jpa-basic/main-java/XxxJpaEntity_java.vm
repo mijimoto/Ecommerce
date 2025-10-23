@@ -1,0 +1,69 @@
+## --------------------------------------------------
+#if ( $entity.isJoinEntity() )
+#cancel("No JPA class for join entity")
+#end
+## --------------------------------------------------
+#checkId($entity)
+#parse("include/init_var_entity.vm")
+#parse("include/java_header.vm")
+##---------------------------------------------------------------------------------------
+## Generate composite-key ID class if needed
+#if ( $entity.hasCompositePrimaryKey() )
+  $generator.generate($target.entityName, "${jpaEntityIdClass}.java", $target.folder, "main-java/XxxJpaEntityId_java.vm")
+  @IdClass(${jpaEntityIdClass}.class)
+#end
+
+## Lombok + JPA Entity
+package ${target.javaPackageFromFolder(${SRC})};
+
+import java.io.Serializable;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+#foreach( $import in $java.imports($entity) )
+import $import;
+#end
+#foreach( $import in $jpa.imports($entity) )
+#if( $import.startsWith("javax.persistence") )
+import $import.replace("javax.persistence", "jakarta.persistence");
+#else
+import $import;
+#end
+#end
+
+/**
+ * JPA entity class for "${entity.name}"
+ *
+ * @author Telosys
+ */
+@Data
+@NoArgsConstructor
+$jpa.entityAnnotations(0, $entity)
+public class ${entity.name} implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    #macro( propName $attr )
+      #if($attr.name.equals("interface"))iface#else$attr.name#end
+    #end
+
+    //--- PRIMARY KEY 
+#foreach( $attribute in $entity.keyAttributes )
+$jpa.fieldAnnotations(4, $attribute)
+    private $attribute.formattedType(10) $attribute.name#if($attribute.hasInitialValue()) = ${attribute.initialValue}#end;
+
+#end
+    //--- OTHER DATA FIELDS 
+#foreach( $attribute in $entity.nonKeyAttributes )
+$jpa.fieldAnnotations(4, $attribute)
+    private $attribute.formattedType(10) #propName($attribute)#if($attribute.hasInitialValue()) = ${attribute.initialValue}#end;
+
+#end
+#if ( $entity.hasLinks() )
+    //--- LINKS ( RELATIONSHIPS )
+#foreach( $link in $entity.links )
+$jpa.linkAnnotations(4, $link, $entity.attributes)
+    private ${link.formattedFieldType(10)} $link.fieldName;
+
+#end
+#end
+}

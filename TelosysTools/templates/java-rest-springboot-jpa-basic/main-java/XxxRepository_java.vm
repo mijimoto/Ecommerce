@@ -1,0 +1,53 @@
+## --------------------------------------------------
+#if ( $entity.isJoinEntity() )
+#cancel("No repository class for join entity")
+#end
+## --------------------------------------------------
+#checkId($entity)
+#parse("include/init_var_entity.vm")
+#parse("include/java_header.vm")
+package ${target.javaPackageFromFolder(${SRC})};
+##---------------------------------------------------------------------------------------
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import ${ROOT_PKG}.persistence.entities.${jpaEntityClass};
+#if ( $entity.hasCompositePrimaryKey() )
+import ${ROOT_PKG}.persistence.entities.${jpaEntityIdClass};
+#else
+#foreach( $import in $java.imports($entity.keyAttributes) )
+import $import;
+#end
+#end
+
+/**
+ * Spring Data JPA repository for entity "${jpaEntityClass}" <br>
+ *
+ * This repository extends JpaRepository interface <br>
+ * so it provides by default all the basic CRUD operations : <br>
+ *   findById, findAll, save, delete, etc <br>
+ * with pagination and sorting : <br>
+ *   findAll(Pageable), findAll(Sort)<br>
+ *
+ * This repository can be extended by adding specific "finder" methods.<br>
+ * For custom queries, follow Spring Data JPA derived query method conventions.
+ *
+ * @author Telosys
+ */
+public interface ${jpaEntityClass}Repository extends JpaRepository<${jpaEntityClass}, ${jpaEntityIdClass}> {
+
+    // -- Add your custom finder methods below --
+
+    // Example: Find by a String field
+    // List<${jpaEntityClass}> findByXxx(String xxx);
+
+    // Example: Find by a field with LIKE behavior
+    // List<${jpaEntityClass}> findByXxxContaining(String xxx);
+
+    // Example: Find by a numerical field
+    // List<${jpaEntityClass}> findByYyy(BigDecimal yyy);
+
+    // Example: Find by foreign key (like PartID)
+    // List<${jpaEntityClass}> findByPartID(Integer partID); // Use Optional<> or single result for OneToOne
+
+}
