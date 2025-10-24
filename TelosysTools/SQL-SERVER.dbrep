@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Telosys Database Repository --><root>
-    <tableList databaseId="0" databaseName="SQL-SERVER" databaseProductName="Microsoft SQL Server" generation="2025-10-23 22:37:34">
+    <tableList databaseId="0" databaseName="SQL-SERVER" databaseProductName="Microsoft SQL Server" generation="2025-10-24 22:07:22">
         <table catalog="EcommerceDB" databaseComment="" databaseType="TABLE" javaBean="Addresses" name="addresses" schema="dbo">
             <column dbAutoIncremented="true" dbComment="" dbDefaultValue="" dbName="id" dbNotNull="true" dbPosition="1" dbPrimaryKey="true" dbSize="10" dbTypeName="int identity" inputType="number" javaName="id" javaType="java.lang.Integer" jdbcTypeCode="4" label="Id" notNull="true" selected="true"/>
             <column dbComment="" dbDefaultValue="" dbName="user_id" dbNotNull="true" dbPosition="2" dbSize="10" dbTypeName="int" inputType="number" javaName="userId" javaType="java.lang.Integer" jdbcTypeCode="4" label="User id" notNull="true" selected="true"/>
@@ -753,6 +753,69 @@
                 </joinColumns>
             </link>
         </table>
+        <table catalog="EcommerceDB" databaseComment="" databaseType="TABLE" javaBean="UserSessions" name="user_sessions" schema="dbo">
+            <column dbAutoIncremented="true" dbComment="" dbDefaultValue="" dbName="id" dbNotNull="true" dbPosition="1" dbPrimaryKey="true" dbSize="19" dbTypeName="bigint identity" inputType="number" javaName="id" javaType="java.lang.Long" jdbcTypeCode="-5" label="Id" notNull="true" selected="true"/>
+            <column dbComment="" dbDefaultValue="" dbName="user_id" dbNotNull="true" dbPosition="2" dbSize="10" dbTypeName="int" inputType="number" javaName="userId" javaType="java.lang.Integer" jdbcTypeCode="4" label="User id" notNull="true" selected="true"/>
+            <column dbComment="" dbDefaultValue="(newid())" dbName="session_uuid" dbNotNull="true" dbPosition="3" dbSize="36" dbTypeName="uniqueidentifier" inputType="text" javaName="sessionUuid" javaType="java.lang.String" jdbcTypeCode="1" label="Session uuid" maxLength="36" notEmpty="true" notNull="true" selected="true"/>
+            <column dbComment="" dbDefaultValue="" dbName="device_type" dbNotNull="false" dbPosition="4" dbSize="100" dbTypeName="nvarchar" inputType="" javaName="deviceType" javaType="java.lang.String" jdbcTypeCode="-9" label="Device type" maxLength="100" notNull="false" selected="true"/>
+            <column dbComment="" dbDefaultValue="" dbName="device_name" dbNotNull="false" dbPosition="5" dbSize="255" dbTypeName="nvarchar" inputType="" javaName="deviceName" javaType="java.lang.String" jdbcTypeCode="-9" label="Device name" maxLength="255" notNull="false" selected="true"/>
+            <column dbComment="" dbDefaultValue="" dbName="ip_address" dbNotNull="false" dbPosition="6" dbSize="45" dbTypeName="nvarchar" inputType="" javaName="ipAddress" javaType="java.lang.String" jdbcTypeCode="-9" label="Ip address" maxLength="45" notNull="false" selected="true"/>
+            <column dbComment="" dbDefaultValue="" dbName="user_agent" dbNotNull="false" dbPosition="7" dbSize="1024" dbTypeName="nvarchar" inputType="" javaName="userAgent" javaType="java.lang.String" jdbcTypeCode="-9" label="User agent" maxLength="1024" notNull="false" selected="true"/>
+            <column dateType="DT" dbComment="" dbDefaultValue="(sysutcdatetime())" dbName="created_at" dbNotNull="true" dbPosition="8" dbSize="23" dbTypeName="datetime2" inputType="" javaName="createdAt" javaType="java.util.Date" jdbcTypeCode="93" label="Created at" notNull="true" selected="true"/>
+            <column dateType="DT" dbComment="" dbDefaultValue="(sysutcdatetime())" dbName="last_active_at" dbNotNull="true" dbPosition="9" dbSize="23" dbTypeName="datetime2" inputType="" javaName="lastActiveAt" javaType="java.util.Date" jdbcTypeCode="93" label="Last active at" notNull="true" selected="true"/>
+            <column dateType="DT" dbComment="" dbDefaultValue="" dbName="expires_at" dbNotNull="false" dbPosition="10" dbSize="23" dbTypeName="datetime2" inputType="" javaName="expiresAt" javaType="java.util.Date" jdbcTypeCode="93" label="Expires at" notNull="false" selected="true"/>
+            <column dbComment="" dbDefaultValue="((0))" dbName="is_revoked" dbNotNull="true" dbPosition="11" dbSize="1" dbTypeName="bit" inputType="checkbox" javaName="isRevoked" javaType="java.lang.Boolean" jdbcTypeCode="-7" label="Is revoked" notNull="true" selected="true"/>
+            <column dateType="DT" dbComment="" dbDefaultValue="" dbName="revoked_at" dbNotNull="false" dbPosition="12" dbSize="23" dbTypeName="datetime2" inputType="" javaName="revokedAt" javaType="java.util.Date" jdbcTypeCode="93" label="Revoked at" notNull="false" selected="true"/>
+            <column dbComment="" dbDefaultValue="" dbName="revoked_reason" dbNotNull="false" dbPosition="13" dbSize="255" dbTypeName="nvarchar" inputType="" javaName="revokedReason" javaType="java.lang.String" jdbcTypeCode="-9" label="Revoked reason" maxLength="255" notNull="false" selected="true"/>
+            <fk name="FK_user_sessions_user">
+                <fkcol colname="user_id" colref="id" deferrable="7" deleterule="3" sequence="1" tablename="user_sessions" tableref="users" updaterule="3"/>
+            </fk>
+            <link cardinality="OneToMany" cascade="" fetch="DEFAULT" foreignKeyName="FK_user_tokens_session" id="LINK_FK_FK_user_tokens_session_I" inverseSideOf="LINK_FK_FK_user_tokens_session_O" javaName="listOfUserTokens" javaType="unused" joinTableName="" mappedBy="userSessions" optional="" owningSide="false" sourceTableName="user_sessions" targetEntity="UserTokens" targetTableName="user_tokens" used="true"/>
+            <link cardinality="ManyToOne" cascade="" fetch="DEFAULT" foreignKeyName="FK_user_sessions_user" id="LINK_FK_FK_user_sessions_user_O" inverseSideOf="" javaName="users" javaType="unused" joinTableName="" mappedBy="" optional="" owningSide="true" sourceTableName="user_sessions" targetEntity="Users" targetTableName="users" used="true">
+                <joinColumns>
+                    <joinColumn insertable="false" name="user_id" nullable="true" referencedColumnName="id" unique="false" updatable="false"/>
+                </joinColumns>
+            </link>
+        </table>
+        <table catalog="EcommerceDB" databaseComment="" databaseType="TABLE" javaBean="UserTokens" name="user_tokens" schema="dbo">
+            <column dbAutoIncremented="true" dbComment="" dbDefaultValue="" dbName="id" dbNotNull="true" dbPosition="1" dbPrimaryKey="true" dbSize="19" dbTypeName="bigint identity" inputType="number" javaName="id" javaType="java.lang.Long" jdbcTypeCode="-5" label="Id" notNull="true" selected="true"/>
+            <column dbComment="" dbDefaultValue="" dbName="user_id" dbNotNull="true" dbPosition="2" dbSize="10" dbTypeName="int" inputType="number" javaName="userId" javaType="java.lang.Integer" jdbcTypeCode="4" label="User id" notNull="true" selected="true"/>
+            <column dbComment="" dbDefaultValue="" dbName="session_id" dbNotNull="false" dbPosition="3" dbSize="19" dbTypeName="bigint" inputType="number" javaName="sessionId" javaType="java.lang.Long" jdbcTypeCode="-5" label="Session id" notNull="false" selected="true"/>
+            <column dbComment="" dbDefaultValue="" dbName="token_type" dbNotNull="true" dbPosition="4" dbSize="50" dbTypeName="nvarchar" inputType="" javaName="tokenType" javaType="java.lang.String" jdbcTypeCode="-9" label="Token type" maxLength="50" notEmpty="true" notNull="true" selected="true"/>
+            <column dbComment="" dbDefaultValue="" dbName="token_hash" dbNotNull="true" dbPosition="5" dbSize="512" dbTypeName="nvarchar" inputType="" javaName="tokenHash" javaType="java.lang.String" jdbcTypeCode="-9" label="Token hash" maxLength="512" notEmpty="true" notNull="true" selected="true"/>
+            <column dbComment="" dbDefaultValue="('hmac-sha256')" dbName="token_hash_algo" dbNotNull="true" dbPosition="6" dbSize="50" dbTypeName="nvarchar" inputType="" javaName="tokenHashAlgo" javaType="java.lang.String" jdbcTypeCode="-9" label="Token hash algo" maxLength="50" notEmpty="true" notNull="true" selected="true"/>
+            <column dateType="DT" dbComment="" dbDefaultValue="(sysutcdatetime())" dbName="created_at" dbNotNull="true" dbPosition="7" dbSize="23" dbTypeName="datetime2" inputType="" javaName="createdAt" javaType="java.util.Date" jdbcTypeCode="93" label="Created at" notNull="true" selected="true"/>
+            <column dateType="DT" dbComment="" dbDefaultValue="" dbName="last_used_at" dbNotNull="false" dbPosition="8" dbSize="23" dbTypeName="datetime2" inputType="" javaName="lastUsedAt" javaType="java.util.Date" jdbcTypeCode="93" label="Last used at" notNull="false" selected="true"/>
+            <column dateType="DT" dbComment="" dbDefaultValue="" dbName="expires_at" dbNotNull="false" dbPosition="9" dbSize="23" dbTypeName="datetime2" inputType="" javaName="expiresAt" javaType="java.util.Date" jdbcTypeCode="93" label="Expires at" notNull="false" selected="true"/>
+            <column dbComment="" dbDefaultValue="((0))" dbName="is_revoked" dbNotNull="true" dbPosition="10" dbSize="1" dbTypeName="bit" inputType="checkbox" javaName="isRevoked" javaType="java.lang.Boolean" jdbcTypeCode="-7" label="Is revoked" notNull="true" selected="true"/>
+            <column dateType="DT" dbComment="" dbDefaultValue="" dbName="revoked_at" dbNotNull="false" dbPosition="11" dbSize="23" dbTypeName="datetime2" inputType="" javaName="revokedAt" javaType="java.util.Date" jdbcTypeCode="93" label="Revoked at" notNull="false" selected="true"/>
+            <column dbComment="" dbDefaultValue="" dbName="revoked_by" dbNotNull="false" dbPosition="12" dbSize="10" dbTypeName="int" inputType="number" javaName="revokedBy" javaType="java.lang.Integer" jdbcTypeCode="4" label="Revoked by" notNull="false" selected="true"/>
+            <column dbComment="" dbDefaultValue="" dbName="metadata" dbNotNull="false" dbPosition="13" dbSize="2147483647" dbTypeName="nvarchar" inputType="" javaName="metadata" javaType="java.lang.String" jdbcTypeCode="-9" label="Metadata" maxLength="2147483647" notNull="false" selected="true"/>
+            <fk name="FK_user_tokens_revoked_by_user">
+                <fkcol colname="revoked_by" colref="id" deferrable="7" deleterule="3" sequence="1" tablename="user_tokens" tableref="users" updaterule="3"/>
+            </fk>
+            <fk name="FK_user_tokens_session">
+                <fkcol colname="session_id" colref="id" deferrable="7" deleterule="3" sequence="1" tablename="user_tokens" tableref="user_sessions" updaterule="3"/>
+            </fk>
+            <fk name="FK_user_tokens_user">
+                <fkcol colname="user_id" colref="id" deferrable="7" deleterule="3" sequence="1" tablename="user_tokens" tableref="users" updaterule="3"/>
+            </fk>
+            <link cardinality="ManyToOne" cascade="" fetch="DEFAULT" foreignKeyName="FK_user_tokens_user" id="LINK_FK_FK_user_tokens_user_O" inverseSideOf="" javaName="users2" javaType="unused" joinTableName="" mappedBy="" optional="" owningSide="true" sourceTableName="user_tokens" targetEntity="Users" targetTableName="users" used="true">
+                <joinColumns>
+                    <joinColumn insertable="false" name="user_id" nullable="true" referencedColumnName="id" unique="false" updatable="false"/>
+                </joinColumns>
+            </link>
+            <link cardinality="ManyToOne" cascade="" fetch="DEFAULT" foreignKeyName="FK_user_tokens_session" id="LINK_FK_FK_user_tokens_session_O" inverseSideOf="" javaName="userSessions" javaType="unused" joinTableName="" mappedBy="" optional="" owningSide="true" sourceTableName="user_tokens" targetEntity="UserSessions" targetTableName="user_sessions" used="true">
+                <joinColumns>
+                    <joinColumn insertable="false" name="session_id" nullable="true" referencedColumnName="id" unique="false" updatable="false"/>
+                </joinColumns>
+            </link>
+            <link cardinality="ManyToOne" cascade="" fetch="DEFAULT" foreignKeyName="FK_user_tokens_revoked_by_user" id="LINK_FK_FK_user_tokens_revoked_by_user_O" inverseSideOf="" javaName="users" javaType="unused" joinTableName="" mappedBy="" optional="" owningSide="true" sourceTableName="user_tokens" targetEntity="Users" targetTableName="users" used="true">
+                <joinColumns>
+                    <joinColumn insertable="false" name="revoked_by" nullable="true" referencedColumnName="id" unique="false" updatable="false"/>
+                </joinColumns>
+            </link>
+        </table>
         <table catalog="EcommerceDB" databaseComment="" databaseType="TABLE" javaBean="Users" name="users" schema="dbo">
             <column dbAutoIncremented="true" dbComment="" dbDefaultValue="" dbName="id" dbNotNull="true" dbPosition="1" dbPrimaryKey="true" dbSize="10" dbTypeName="int identity" inputType="number" javaName="id" javaType="java.lang.Integer" jdbcTypeCode="4" label="Id" notNull="true" selected="true"/>
             <column dbComment="" dbDefaultValue="" dbName="email" dbNotNull="true" dbPosition="2" dbSize="255" dbTypeName="nvarchar" inputType="" javaName="email" javaType="java.lang.String" jdbcTypeCode="-9" label="Email" maxLength="255" notEmpty="true" notNull="true" selected="true"/>
@@ -768,11 +831,14 @@
             <link cardinality="OneToMany" cascade="" fetch="DEFAULT" foreignKeyName="FK_user_phone_numbers_user" id="LINK_FK_FK_user_phone_numbers_user_I" inverseSideOf="LINK_FK_FK_user_phone_numbers_user_O" javaName="listOfUserPhoneNumbers" javaType="unused" joinTableName="" mappedBy="users" optional="" owningSide="false" sourceTableName="users" targetEntity="UserPhoneNumbers" targetTableName="user_phone_numbers" used="true"/>
             <link cardinality="OneToMany" cascade="" fetch="DEFAULT" foreignKeyName="FK_product_reviews_user" id="LINK_FK_FK_product_reviews_user_I" inverseSideOf="LINK_FK_FK_product_reviews_user_O" javaName="listOfProductReviews" javaType="unused" joinTableName="" mappedBy="users" optional="" owningSide="false" sourceTableName="users" targetEntity="ProductReviews" targetTableName="product_reviews" used="true"/>
             <link cardinality="OneToMany" cascade="" fetch="DEFAULT" foreignKeyName="FK_orders_user" id="LINK_FK_FK_orders_user_I" inverseSideOf="LINK_FK_FK_orders_user_O" javaName="listOfOrders" javaType="unused" joinTableName="" mappedBy="users" optional="" owningSide="false" sourceTableName="users" targetEntity="Orders" targetTableName="orders" used="true"/>
+            <link cardinality="OneToMany" cascade="" fetch="DEFAULT" foreignKeyName="FK_user_sessions_user" id="LINK_FK_FK_user_sessions_user_I" inverseSideOf="LINK_FK_FK_user_sessions_user_O" javaName="listOfUserSessions" javaType="unused" joinTableName="" mappedBy="users" optional="" owningSide="false" sourceTableName="users" targetEntity="UserSessions" targetTableName="user_sessions" used="true"/>
+            <link cardinality="OneToMany" cascade="" fetch="DEFAULT" foreignKeyName="FK_user_tokens_revoked_by_user" id="LINK_FK_FK_user_tokens_revoked_by_user_I" inverseSideOf="LINK_FK_FK_user_tokens_revoked_by_user_O" javaName="listOfUserTokens" javaType="unused" joinTableName="" mappedBy="users" optional="" owningSide="false" sourceTableName="users" targetEntity="UserTokens" targetTableName="user_tokens" used="true"/>
             <link cardinality="OneToMany" cascade="" fetch="DEFAULT" foreignKeyName="FK_user_roles_user" id="LINK_FK_FK_user_roles_user_I" inverseSideOf="LINK_FK_FK_user_roles_user_O" javaName="listOfUserRoles" javaType="unused" joinTableName="" mappedBy="users" optional="" owningSide="false" sourceTableName="users" targetEntity="UserRoles" targetTableName="user_roles" used="true"/>
             <link cardinality="OneToMany" cascade="" fetch="DEFAULT" foreignKeyName="FK_wishlists_user" id="LINK_FK_FK_wishlists_user_I" inverseSideOf="LINK_FK_FK_wishlists_user_O" javaName="listOfWishlists" javaType="unused" joinTableName="" mappedBy="users" optional="" owningSide="false" sourceTableName="users" targetEntity="Wishlists" targetTableName="wishlists" used="true"/>
             <link cardinality="OneToMany" cascade="" fetch="DEFAULT" foreignKeyName="FK_order_events_actor" id="LINK_FK_FK_order_events_actor_I" inverseSideOf="LINK_FK_FK_order_events_actor_O" javaName="listOfOrderEvents" javaType="unused" joinTableName="" mappedBy="users" optional="" owningSide="false" sourceTableName="users" targetEntity="OrderEvents" targetTableName="order_events" used="true"/>
             <link cardinality="OneToMany" cascade="" fetch="DEFAULT" foreignKeyName="FK_coupon_redemptions_user" id="LINK_FK_FK_coupon_redemptions_user_I" inverseSideOf="LINK_FK_FK_coupon_redemptions_user_O" javaName="listOfCouponRedemptions" javaType="unused" joinTableName="" mappedBy="users" optional="" owningSide="false" sourceTableName="users" targetEntity="CouponRedemptions" targetTableName="coupon_redemptions" used="true"/>
             <link cardinality="OneToMany" cascade="" fetch="DEFAULT" foreignKeyName="FK_addresses_user" id="LINK_FK_FK_addresses_user_I" inverseSideOf="LINK_FK_FK_addresses_user_O" javaName="listOfAddresses" javaType="unused" joinTableName="" mappedBy="users" optional="" owningSide="false" sourceTableName="users" targetEntity="Addresses" targetTableName="addresses" used="true"/>
+            <link cardinality="OneToMany" cascade="" fetch="DEFAULT" foreignKeyName="FK_user_tokens_user" id="LINK_FK_FK_user_tokens_user_I" inverseSideOf="LINK_FK_FK_user_tokens_user_O" javaName="listOfUserTokens2" javaType="unused" joinTableName="" mappedBy="users2" optional="" owningSide="false" sourceTableName="users" targetEntity="UserTokens" targetTableName="user_tokens" used="true"/>
             <link cardinality="OneToMany" cascade="" fetch="DEFAULT" foreignKeyName="FK_audit_logs_user" id="LINK_FK_FK_audit_logs_user_I" inverseSideOf="LINK_FK_FK_audit_logs_user_O" javaName="listOfAuditLogs" javaType="unused" joinTableName="" mappedBy="users" optional="" owningSide="false" sourceTableName="users" targetEntity="AuditLogs" targetTableName="audit_logs" used="true"/>
         </table>
         <table catalog="EcommerceDB" databaseComment="" databaseType="TABLE" javaBean="VariantOptionGroups" name="variant_option_groups" schema="dbo">
