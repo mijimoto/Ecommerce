@@ -1,6 +1,6 @@
 ## --------------------------------------------------
 #if ( $entity.isJoinEntity() )
-#cancel("No SERVICE class for join entity")
+#cancel("No CONTROLLER class for join entity")
 #end
 ## --------------------------------------------------
 #checkId($entity)
@@ -13,8 +13,9 @@ package ${target.javaPackageFromFolder(${SRC})};
 #foreach( $import in $java.imports($entity.keyAttributes) )
 import $import;
 #end
-import java.math.BigDecimal;
 import java.util.List;
+
+import jakarta.validation.Valid;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +40,14 @@ import ${ROOT_PKG}.rest.services.${serviceClass};
   #set($sep = ", ")
 #end
 
+/**
+ * REST Controller for ${entity.name}
+ * 
+ * Provides CRUD operations via HTTP endpoints
+ * All exceptions are handled by GlobalExceptionHandler
+ * 
+ * @author Telosys
+ */
 @CrossOrigin(origins = "*")
 @RestController
 @RequestMapping(value = "${REST_API_ROOT}/${fn.toLowerCase($entity.name)}", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -53,72 +62,87 @@ public class ${controllerClass} {
         this.service = service;
     }
 
+    /**
+     * GET all ${entity.name}
+     *
+     * @return list of ${entity.name} DTOs
+     */
     @GetMapping
-    public ResponseEntity<List<${dtoClass}>> findAll(
-            @RequestParam(defaultValue = "1") int pageNumber,
-            @RequestParam(defaultValue = "20") int pageSize,
-            @RequestParam(required = false) String searchName,
-            @RequestParam(required = false) BigDecimal minPrice,
-            @RequestParam(required = false) BigDecimal maxPrice,
-            @RequestParam(defaultValue = "PartName") String sortBy,
-            @RequestParam(defaultValue = "ASC") String sortDirection
-    ) {
-        logger.debug("GET - findAll with pagination & filters");
-        List<${dtoClass}> list = service.findAll(pageNumber, pageSize, searchName, minPrice, maxPrice, sortBy, sortDirection);
+    public ResponseEntity<List<${dtoClass}>> findAll() {
+        logger.debug("GET - findAll");
+        List<${dtoClass}> list = service.findAll();
         return ResponseEntity.ok(list);
     }
 
+    /**
+     * GET ${entity.name} by ID
+     * 
+#foreach( $attribute in $entity.keyAttributes )
+     * @param $attribute.name
+#end
+     * @return ${entity.name} DTO or 404 if not found
+     */
     @GetMapping("${REST_PATH_FOR_ID}")
     public ResponseEntity<${dtoClass}> findById($REST_PARAM_FOR_ID) {
-        logger.debug("GET - findById");
+        logger.debug("GET - findById: {}", $ID_ARGS);
+        
         ${dtoClass} dto = service.findById($ID_ARGS);
-        return (dto != null) ? ResponseEntity.ok(dto) : ResponseEntity.notFound().build();
+        
+        if (dto != null) {
+            return ResponseEntity.ok(dto);
+        } else {
+            return ResponseEntity.notFound().build();
+        }
     }
 
+    /**
+     * POST - Create new ${entity.name}
+     * 
+     * @param ${fn.uncapitalize($entity.name)}DTO the DTO to create
+     * @return 201 Created with the created DTO, or 400/422 on validation error
+     */
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Void> create(@RequestBody ${dtoClass} ${fn.uncapitalize($entity.name)}DTO) {
-        logger.debug("POST - create");
-        if (service.create(${fn.uncapitalize($entity.name)}DTO)) {
-            return ResponseEntity.status(HttpStatus.CREATED).build();
-        } else {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
-        }
+    public ResponseEntity<${dtoClass}> create(@Valid @RequestBody ${dtoClass} ${fn.uncapitalize($entity.name)}DTO) {
+        logger.debug("POST - create: {}", ${fn.uncapitalize($entity.name)}DTO);
+        
+        ${dtoClass} created = service.create(${fn.uncapitalize($entity.name)}DTO);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
-    @PutMapping(value = "${REST_PATH_FOR_ID}")
-    public ResponseEntity<Void> save($REST_PARAM_FOR_ID, @RequestBody ${dtoClass} ${fn.uncapitalize($entity.name)}DTO) {
-        logger.debug("PUT - save");
-        service.save($ID_ARGS, ${fn.uncapitalize($entity.name)}DTO);
-        return ResponseEntity.ok().build();
-    }
-
-    @PutMapping
-    public ResponseEntity<Void> update(@RequestBody ${dtoClass} ${fn.uncapitalize($entity.name)}DTO) {
-        logger.debug("PUT - update");
-        if (service.update(${fn.uncapitalize($entity.name)}DTO)) {
-            return ResponseEntity.ok().build();
-        } else {
-            return ResponseEntity.notFound().build();
-        }
-    }
-
+    /**
+     * PATCH - Partial update of ${entity.name}
+     * Only updates fields that are present (non-null) in the request body
+     * 
+#foreach( $attribute in $entity.keyAttributes )
+     * @param $attribute.name
+#end
+     * @param ${fn.uncapitalize($entity.name)}DTO the DTO with fields to update
+     * @return 200 OK with updated DTO, or 404 if not found
+     */
     @PatchMapping(value = "${REST_PATH_FOR_ID}", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Void> partialUpdate($REST_PARAM_FOR_ID, @RequestBody ${dtoClass} ${fn.uncapitalize($entity.name)}DTO) {
-        logger.debug("PATCH - partialUpdate");
-        if (service.partialUpdate($ID_ARGS, ${fn.uncapitalize($entity.name)}DTO)) {
-            return ResponseEntity.ok().build();
-        } else {
-            return ResponseEntity.notFound().build();
-        }
+    public ResponseEntity<${dtoClass}> partialUpdate(
+            $REST_PARAM_FOR_ID,
+            @RequestBody ${dtoClass} ${fn.uncapitalize($entity.name)}DTO) {
+        logger.debug("PATCH - partialUpdate: id={}, dto={}", $ID_ARGS, ${fn.uncapitalize($entity.name)}DTO);
+        
+        ${dtoClass} updated = service.partialUpdate($ID_ARGS, ${fn.uncapitalize($entity.name)}DTO);
+        return ResponseEntity.ok(updated);
     }
 
+    /**
+     * DELETE ${entity.name} by ID
+     * 
+#foreach( $attribute in $entity.keyAttributes )
+     * @param $attribute.name
+#end
+     * @return 204 No Content if deleted, or 404 if not found
+     */
     @DeleteMapping("${REST_PATH_FOR_ID}")
     public ResponseEntity<Void> deleteById($REST_PARAM_FOR_ID) {
-        logger.debug("DELETE - deleteById");
-        if (service.deleteById($ID_ARGS)) {
-            return ResponseEntity.noContent().build();
-        } else {
-            return ResponseEntity.notFound().build();
-        }
+        logger.debug("DELETE - deleteById: {}", $ID_ARGS);
+        
+        service.deleteById($ID_ARGS);
+        return ResponseEntity.noContent().build();
     }
+
 }

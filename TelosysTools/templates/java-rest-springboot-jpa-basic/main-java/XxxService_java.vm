@@ -20,14 +20,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.math.BigDecimal;
-import java.util.stream.Collectors;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 import ${ROOT_PKG}.persistence.entities.${jpaEntityClass};
 import ${ROOT_PKG}.persistence.repositories.${repositoryClass};
 import ${ROOT_PKG}.rest.dto.${dtoClass};
-import ${ROOT_PKG}.rest.services.commons.GenericService;
+import ${ROOT_PKG}.common.rest.services.GenericService;
 #if ( $entity.hasCompositePrimaryKey() )
 import ${ROOT_PKG}.persistence.entities.${jpaEntityIdClass};
 #end
@@ -35,22 +34,17 @@ import ${ROOT_PKG}.persistence.entities.${jpaEntityIdClass};
 ## Import related entity classes and repositories for FK handling
 #foreach( $link in $entity.links )
 #if ( $link.isCardinalityManyToOne() || $link.isCardinalityOneToOne() )
-import ${ROOT_PKG}.persistence.entities.${link.targetEntity.name};
 import ${ROOT_PKG}.persistence.repositories.${link.targetEntity.name}Repository;
-import ${ROOT_PKG}.rest.dto.${link.targetEntity.name}DTO;
 #end
 #end
-
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.ParameterMode;
-import jakarta.persistence.StoredProcedureQuery;
 
 /**
  * REST service for entity "${entity.name}" <br>
- * 
+ *
  * This service provides all the necessary operations required by the REST controller <br>
- * Enhanced to handle foreign key relationships and one-to-one cascading <br>
- * 
+ * Enhanced to handle foreign key relationships with proper validation and error handling using
+ * ResponseStatusException (Option A).
+ *
  * @author Telosys
  *
  */
@@ -58,460 +52,315 @@ import jakarta.persistence.StoredProcedureQuery;
 @Transactional
 public class ${serviceClass} extends GenericService<${jpaEntityClass}, ${dtoClass}> {
 
-	private static final Logger logger = LoggerFactory.getLogger(${serviceClass}.class);
+    private static final Logger logger = LoggerFactory.getLogger(${serviceClass}.class);
 
-	private final ${repositoryClass} repository; // injected by constructor
+    private final ${repositoryClass} repository;
 
 ## Inject repositories for related entities
 #foreach( $link in $entity.links )
 #if ( $link.isCardinalityManyToOne() || $link.isCardinalityOneToOne() )
-	private final ${link.targetEntity.name}Repository ${link.targetEntity.name.toLowerCase()}Repository;
+    private final ${link.targetEntity.name}Repository ${link.targetEntity.name.toLowerCase()}Repository;
 #end
 #end
-	
-	private final EntityManager em;
 
-	/**
-	 * Constructor (usable for Dependency Injection)
-	 * 
-	 * @param repository the repository to be injected
+    /**
+     * Constructor (usable for Dependency Injection)
+     *
+     * @param repository the repository to be injected
 #foreach( $link in $entity.links )
 #if ( $link.isCardinalityManyToOne() || $link.isCardinalityOneToOne() )
-	 * @param ${link.targetEntity.name.toLowerCase()}Repository the ${link.targetEntity.name} repository to be injected
+     * @param ${link.targetEntity.name.toLowerCase()}Repository the ${link.targetEntity.name} repository to be injected
 #end
 #end
-	 */
-	public ${serviceClass}(${repositoryClass} repository#foreach( $link in $entity.links )#if ( $link.isCardinalityManyToOne() || $link.isCardinalityOneToOne() ), ${link.targetEntity.name}Repository ${link.targetEntity.name.toLowerCase()}Repository#end#end, EntityManager em) {
-		super(${jpaEntityClass}.class, ${dtoClass}.class);
-		this.repository = repository;
+     */
+    public ${serviceClass}(${repositoryClass} repository#foreach( $link in $entity.links )#if ( $link.isCardinalityManyToOne() || $link.isCardinalityOneToOne() ), ${link.targetEntity.name}Repository ${link.targetEntity.name.toLowerCase()}Repository#end#end) {
+        super(${jpaEntityClass}.class, ${dtoClass}.class);
+        this.repository = repository;
 #foreach( $link in $entity.links )
 #if ( $link.isCardinalityManyToOne() || $link.isCardinalityOneToOne() )
-		this.${link.targetEntity.name.toLowerCase()}Repository = ${link.targetEntity.name.toLowerCase()}Repository;
+        this.${link.targetEntity.name.toLowerCase()}Repository = ${link.targetEntity.name.toLowerCase()}Repository;
 #end
 #end
-		this.em = em;
-	}
-	
-	/**
-	 * Returns the entity ID object from the given DTO
-	 *
-	 * @param dto
-	 * @return
-	 */
-	private $jpaEntityIdClass getEntityId(${dtoClass} dto) {
+    }
+    
+    /**
+     * Returns the entity ID object from the given DTO
+     *
+     * @param dto the DTO
+     * @return the entity ID
+     */
+    private $jpaEntityIdClass getEntityId(${dtoClass} dto) {
 #if ( $entity.hasCompositePrimaryKey() )
-		return new $jpaEntityIdClass($fn.argumentsListWithGetter("dto", $entity.keyAttributes));
+        return new $jpaEntityIdClass($fn.argumentsListWithGetter("dto", $entity.keyAttributes));
 #else
-		return dto.${entity.keyAttribute.getter}();
+        return dto.${entity.keyAttribute.getter}();
 #end
-	}
+    }
 
-	/**
-	 * Validates foreign key references before saving
-	 *
-	 * @param dto
-	 * @throws IllegalArgumentException if any FK reference is invalid
-	 */
-	private void validateForeignKeyReferences(${dtoClass} dto) {
+    /**
+     * Validates foreign key references before persisting
+     *
+     * @param dto the DTO to validate
+     * @throws ResponseStatusException if any FK reference is invalid (HTTP 400)
+     */
+    private void validateForeignKeyReferences(${dtoClass} dto) {
 #foreach( $link in $entity.links )
 #if ( $link.isCardinalityManyToOne() || $link.isCardinalityOneToOne() )
 #foreach( $linkAttribute in $link.attributes )
 #set( $fkAttribute = $linkAttribute.originAttribute )
-		// Validate ${link.targetEntity.name} reference
+        // Validate ${link.targetEntity.name} reference
 #if( $fkAttribute.name.toLowerCase() == "interface" )
-		if (dto.getInterfaceField() != null) {
-			if (!${link.targetEntity.name.toLowerCase()}Repository.existsById(dto.getInterfaceField())) {
-				throw new IllegalArgumentException("Invalid ${link.targetEntity.name} reference: " + dto.getInterfaceField());
-			}
-		}
+        if (dto.getInterfaceField() != null && !${link.targetEntity.name.toLowerCase()}Repository.existsById(dto.getInterfaceField())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    String.format("Invalid %s id: %s", "${link.targetEntity.name}", dto.getInterfaceField()));
+        }
 #else
-		if (dto.${fkAttribute.getter}() != null) {
-			if (!${link.targetEntity.name.toLowerCase()}Repository.existsById(dto.${fkAttribute.getter}())) {
-				throw new IllegalArgumentException("Invalid ${link.targetEntity.name} reference: " + dto.${fkAttribute.getter}());
-			}
-		}
+        if (dto.${fkAttribute.getter}() != null && !${link.targetEntity.name.toLowerCase()}Repository.existsById(dto.${fkAttribute.getter}())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    String.format("Invalid %s id: %s", "${link.targetEntity.name}", dto.${fkAttribute.getter}()));
+        }
 #end
 #end
 #end
 #end
-	}
+    }
 
-	/**
-	 * Finds all occurrences of the entity
-	 *
-	 * @return
-	 */
-	/*
-	 * public List<${dtoClass}> findAll() {
-			logger.debug("findAll()");
-			Iterable<${jpaEntityClass}> all = repository.findAll();
-			return entityListToDtoList(all);
-		}
-	 */
-	public List<${dtoClass}> findAll(int pageNumber, int pageSize, String searchName, BigDecimal minPrice, BigDecimal maxPrice, String sortBy, String sortDirection) {
-	    logger.debug("findAll() via stored procedure with parameters");
-
-	    StoredProcedureQuery sp = em.createStoredProcedureQuery("sp_Get${entity.name}sWithPagination");
-
-	    sp.registerStoredProcedureParameter("PageNumber", Integer.class, ParameterMode.IN);
-	    sp.registerStoredProcedureParameter("PageSize", Integer.class, ParameterMode.IN);
-	    sp.registerStoredProcedureParameter("SearchName", String.class, ParameterMode.IN);
-	    sp.registerStoredProcedureParameter("MinPrice", BigDecimal.class, ParameterMode.IN);
-	    sp.registerStoredProcedureParameter("MaxPrice", BigDecimal.class, ParameterMode.IN);
-	    sp.registerStoredProcedureParameter("SortBy", String.class, ParameterMode.IN);
-	    sp.registerStoredProcedureParameter("SortDirection", String.class, ParameterMode.IN);
-	    sp.registerStoredProcedureParameter("TotalCount", Integer.class, ParameterMode.OUT);
-
-	    sp.setParameter("PageNumber", pageNumber);
-	    sp.setParameter("PageSize", pageSize);
-	    sp.setParameter("SearchName", searchName);
-	    sp.setParameter("MinPrice", minPrice);
-	    sp.setParameter("MaxPrice", maxPrice);
-	    sp.setParameter("SortBy", sortBy);
-	    sp.setParameter("SortDirection", sortDirection);
-
-	    @SuppressWarnings("unchecked")
-	    List<Object[]> rows = sp.getResultList();
-
-	    return rows.stream().map(r -> {
-	        ${dtoClass} ${fn.uncapitalize($entity.name)}Dto = new ${dtoClass}();
-
-#foreach( $link in $entity.links )
-#if ( $link.isCardinalityManyToOne() || $link.isCardinalityOneToOne() )
-	        ${link.targetEntity.name}DTO ${fn.uncapitalize($link.targetEntity.name)} = new ${link.targetEntity.name}DTO();
-	        ${fn.uncapitalize($link.targetEntity.name)}.set${fn.capitalize($link.targetEntity.keyAttribute.name)}((Integer) r[0]);
-	        ${fn.uncapitalize($link.targetEntity.name)}.set${fn.capitalize($link.targetEntity.nonKeyAttributes.get(0).name)}((String) r[1]);
-	        ${fn.uncapitalize($link.targetEntity.name)}.set${fn.capitalize($link.targetEntity.nonKeyAttributes.get(1).name)}((BigDecimal) r[2]);
-
-	        ${fn.uncapitalize($entity.name)}Dto.set${fn.capitalize($entity.keyAttribute.name)}(${fn.uncapitalize($link.targetEntity.name)}.get${fn.capitalize($link.targetEntity.keyAttribute.name)}());
-	        ${fn.uncapitalize($entity.name)}Dto.set${fn.capitalize($link.targetEntity.name)}(${fn.uncapitalize($link.targetEntity.name)});
-#break
-#end
-#end
-#set($index = 3)
-#foreach( $attribute in $entity.nonKeyAttributes )
-#if ( !$attribute.name.toLowerCase().contains("partid") && !$attribute.name.toLowerCase().contains("componentid") )
-#if ( $attribute.type == "Integer" )
-	        ${fn.uncapitalize($entity.name)}Dto.set${fn.capitalize($attribute.name)}((Integer) r[${index}]);
-#elseif ( $attribute.type == "BigDecimal" )
-	        ${fn.uncapitalize($entity.name)}Dto.set${fn.capitalize($attribute.name)}((BigDecimal) r[${index}]);
-#else
-	        ${fn.uncapitalize($entity.name)}Dto.set${fn.capitalize($attribute.name)}((String) r[${index}]);
-#end
-#set($index = $index + 1)
-#end
-#end
-
-	        return ${fn.uncapitalize($entity.name)}Dto;
-	    }).collect(Collectors.toList());
-	}
+    /**
+     * Finds all occurrences of the entity
+     *
+     * @return list of DTOs
+     */
+    public List<${dtoClass}> findAll() {
+        logger.debug("findAll()");
+        Iterable<${jpaEntityClass}> all = repository.findAll();
+        return entityListToDtoList(all);
+    }
 
 #if ( $entity.hasCompositePrimaryKey() )
 #set( $entityIdInit = "new $jpaEntityIdClass($fn.argumentsList($entity.keyAttributes))" )
 #else
 #set( $entityIdInit = "${entity.keyAttribute.name}" )
 #end
-	/**
-	 * Finds the entity identified by the given PK
-	 *
+    /**
+     * Finds the entity identified by the given PK
+     *
 #foreach( $attribute in $entity.keyAttributes )   
-	 * @param $attribute.name 
+     * @param $attribute.name 
 #end
-	 * @return the entity or null if not found
-	 */
-	public ${dtoClass} findById($fn.argumentsListWithType($entity.keyAttributes)) {
-		${jpaEntityIdClass} entityId = ${entityIdInit};
-		logger.debug("findById({})", entityId);
-		Optional<${jpaEntityClass}> optionalEntity = repository.findById(entityId);
-		return entityToDto(optionalEntity);
-	}
+     * @return the DTO or null if not found
+     */
+    public ${dtoClass} findById($fn.argumentsListWithType($entity.keyAttributes)) {
+        ${jpaEntityIdClass} entityId = ${entityIdInit};
+        logger.debug("findById({})", entityId);
+        Optional<${jpaEntityClass}> optionalEntity = repository.findById(entityId);
+        return entityToDto(optionalEntity);
+    }
 
-	/**
-	 * Saves the given entity with the given PK <br>
-	 * "UPSERT" operation (updated if it exists or created if it does not exist) <br>
-	 * Validates foreign key references before saving
-	 *
-#foreach( $attribute in $entity.keyAttributes )
-	 * @param $attribute.name 
-#end
-	 * @param dto 
-	 */
-	public void save($fn.argumentsListWithType($entity.keyAttributes), ${dtoClass} dto) {
-		${jpaEntityIdClass} entityId = ${entityIdInit};
-		logger.debug("save({},{})", entityId, dto);
-		
-		// Validate foreign key references
-		validateForeignKeyReferences(dto);
-		
-		// force PK in DTO (just to be sure to conform with the given PK) 
-#foreach( $attribute in $entity.keyAttributes )
-		dto.${attribute.setter}(${attribute.name});
-#end
-
-## Handle one-to-one relationship creation if this is a child entity
-#foreach( $link in $entity.links )
-#if ( $link.isCardinalityOneToOne() && $link.isOwningEntity() )
-		// Handle one-to-one relationship - create parent entity if needed
-		handleOneToOneRelationshipCreation(dto);
-#end
-#end
-
-		repository.save(dtoToEntity(dto));
-	}
-
-	/**
-	 * Updates the given entity if it exists <br>
-	 * Validates foreign key references before updating
-	 *
-	 * @param dto
-	 * @return true if updated, false if not found
-	 */
-	public boolean update(${dtoClass} dto) {
-		logger.debug("update({})", dto);
-		
-		// Validate foreign key references
-		validateForeignKeyReferences(dto);
-		
-		if (repository.existsById(getEntityId(dto))) {
-			repository.save(dtoToEntity(dto));
-			return true; // found and updated
-		} else {
-			return false; // not found (not updated)
-		}
-	}
-
-	/**
-	 * Updates partially the given entity if it exists <br>
-	 * Validates foreign key references for non-null FK fields
-	 *
+    /**
+     * Finds the entity by ID or throws exception
+     *
 #foreach( $attribute in $entity.keyAttributes )   
-	 * @param $attribute.name 
+     * @param $attribute.name 
 #end
-	 * @param dto
-	 * @return true if updated, false if not found
-	 */
-	public boolean partialUpdate($fn.argumentsListWithType($entity.keyAttributes), ${dtoClass} dto) {
-		${jpaEntityIdClass} entityId = ${entityIdInit};
-		logger.debug("partialUpdate({}, {})", entityId, dto);
-		
-		Optional<${jpaEntityClass}> optionalEntity = repository.findById(entityId);
-		if (optionalEntity.isPresent()) {
-			${jpaEntityClass} entity = optionalEntity.get();
-			
-			// Update only non-null fields from DTO
-#foreach( $attribute in $entity.nonKeyAttributes )
-			if (dto.${attribute.getter}() != null) {
-#set( $isForeignKey = false )
-#foreach( $link in $entity.links )
-#if ( $link.isCardinalityManyToOne() || $link.isCardinalityOneToOne() )
-#foreach( $linkAttribute in $link.attributes )
-#if ( $linkAttribute.originAttribute.name == $attribute.name )
-#set( $isForeignKey = true )
-				// Validate FK reference before updating
-#if( $attribute.name.toLowerCase() == "interface" )
-				if (!${link.targetEntity.name.toLowerCase()}Repository.existsById(dto.getInterfaceField())) {
-					throw new IllegalArgumentException("Invalid ${link.targetEntity.name} reference: " + dto.getInterfaceField());
-				}
-#else
-				if (!${link.targetEntity.name.toLowerCase()}Repository.existsById(dto.${attribute.getter}())) {
-					throw new IllegalArgumentException("Invalid ${link.targetEntity.name} reference: " + dto.${attribute.getter}());
-				}
-#end
-#end
-#end
-#end
-#end
-				entity.${attribute.setter}(dto.${attribute.getter}());
-			}
-#end
-			
-			repository.save(entity);
-			return true; // found and updated
-		} else {
-			return false; // not found (not updated)
-		}
-	}
+     * @return the DTO
+     * @throws ResponseStatusException if not found (HTTP 404)
+     */
+    public ${dtoClass} findByIdOrThrow($fn.argumentsListWithType($entity.keyAttributes)) {
+        ${jpaEntityIdClass} entityId = ${entityIdInit};
+        logger.debug("findByIdOrThrow({})", entityId);
+        Optional<${jpaEntityClass}> optionalEntity = repository.findById(entityId);
+        if (!optionalEntity.isPresent()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    String.format("${entity.name} with id %s not found", entityId));
+        }
+        return entityToDto(optionalEntity.get());
+    }
 
-	/**
-	 * Creates the given entity <br>
-	 * Validates foreign key references before creating
-	 *
-	 * @param dto
-	 * @return true if created, false if already exists
-	 */
-	public boolean create(${dtoClass} dto) {
-		logger.debug("create({})", dto);
-		
-		// Validate foreign key references
-		validateForeignKeyReferences(dto);
-		
+    /**
+     * Creates the given entity <br>
+     * Validates foreign key references before creating
+     *
+     * @param dto the DTO to create
+     * @return the created DTO with generated ID (if applicable)
+     * @throws ResponseStatusException if FK validation fails (HTTP 400)
+     */
+    public ${dtoClass} create(${dtoClass} dto) {
+        logger.debug("create({})", dto);
+        
+        // Validate DTO
+        validateDto(dto);
+        
+        // Validate foreign key references FIRST
+        validateForeignKeyReferences(dto);
+        
 #if ($entity.hasAutoIncrementedKey() )
-		// auto-generated Primary Key
-## Handle one-to-one relationship creation if this is a child entity
-#foreach( $link in $entity.links )
-#if ( $link.isCardinalityOneToOne() && $link.isOwningEntity() )
-		// Handle one-to-one relationship - create parent entity if needed
-		handleOneToOneRelationshipCreation(dto);
+        // Auto-generated Primary Key - always create
+        ${jpaEntityClass} entity = dtoToEntity(dto);
+        ${jpaEntityClass} saved = repository.save(entity);
+        return entityToDto(saved);
+#else    
+        // Check if already exists
+        if (repository.existsById(getEntityId(dto))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    String.format("${entity.name} with this ID already exists: %s", getEntityId(dto)));
+        }
+        
+        ${jpaEntityClass} entity = dtoToEntity(dto);
+        ${jpaEntityClass} saved = repository.save(entity);
+        return entityToDto(saved);
 #end
-#end
-		repository.save(dtoToEntity(dto));
-		return true; // always created
-#else	
-		if (repository.existsById(getEntityId(dto))) {
-			return false; // already exists, not created
-		} else {
-## Handle one-to-one relationship creation if this is a child entity
-#foreach( $link in $entity.links )
-#if ( $link.isCardinalityOneToOne() && $link.isOwningEntity() )
-			// Handle one-to-one relationship - create parent entity if needed
-			handleOneToOneRelationshipCreation(dto);
-#end
-#end
-			repository.save(dtoToEntity(dto));
-			return true; // created
-		}
-#end
-	}
+    }
 
-## Add method to handle one-to-one relationship creation
-#foreach( $link in $entity.links )
-#if ( $link.isCardinalityOneToOne() && $link.isOwningEntity() )
-	/**
-	 * Handles one-to-one relationship creation for ${link.targetEntity.name}
-	 * Creates the parent entity if it doesn't exist
-	 *
-	 * @param dto
-	 */
-	private void handleOneToOneRelationshipCreation(${dtoClass} dto) {
-#foreach( $linkAttribute in $link.attributes )
-#set( $fkAttribute = $linkAttribute.originAttribute )
-		if (dto.${fkAttribute.getter}() != null) {
-			if (!${link.targetEntity.name.toLowerCase()}Repository.existsById(dto.${fkAttribute.getter}())) {
-				// Create a basic parent entity
-				${link.targetEntity.name} parent = new ${link.targetEntity.name}();
-				parent.set${fn.capitalize($link.targetEntity.keyAttribute.name)}(dto.${fkAttribute.getter}());
-				// Set other required fields to default values
-				${link.targetEntity.name.toLowerCase()}Repository.save(parent);
-				logger.info("Created parent ${link.targetEntity.name} with ID: {}", dto.${fkAttribute.getter}());
-			}
-		}
-#end
-	}
-#end
-#end
-
-	/**
-	 * Deletes an entity by its PK <br>
-	 * Handles cascading delete for one-to-one relationships
-	 *
+    /**
+     * Updates partially the given entity if it exists <br>
+     * Only updates non-null fields from DTO <br>
+     * Validates foreign key references for non-null FK fields
+     *
 #foreach( $attribute in $entity.keyAttributes )   
-	 * @param $attribute.name 
+     * @param $attribute.name 
 #end
-	 * @return true if deleted, false if not found
-	 */
-	public boolean deleteById($fn.argumentsListWithType($entity.keyAttributes)) {
-		${jpaEntityIdClass} entityId = ${entityIdInit};
-		logger.debug("deleteById({})", entityId);
-		
-		if (repository.existsById(entityId)) {
-## Handle one-to-one relationship deletion
-#foreach( $link in $entity.links )
-#if ( $link.isCardinalityOneToOne() && !$link.isOwningEntity() )
-			// Handle cascading delete for one-to-one relationship
-			Optional<${jpaEntityClass}> entity = repository.findById(entityId);
-			if (entity.isPresent()) {
-#foreach( $linkAttribute in $link.attributes )
-#set( $fkAttribute = $linkAttribute.originAttribute )
-				${link.targetEntity.name}Id parentId = entity.get().${fkAttribute.getter}();
-				if (parentId != null) {
-					${link.targetEntity.name.toLowerCase()}Repository.deleteById(parentId);
-					logger.info("Cascading delete: removed parent ${link.targetEntity.name} with ID: {}", parentId);
-				}
-#end
-			}
-#end
-#end
-			
-			repository.deleteById(entityId);
-			return true; // found and deleted
-		} else {
-			return false; // not found (not deleted)
-		}
-	}
+     * @param dto the DTO with fields to update
+     * @return the updated DTO
+     * @throws ResponseStatusException if entity not found (404) or FK validation fails (400)
+     */
+    public ${dtoClass} partialUpdate($fn.argumentsListWithType($entity.keyAttributes), ${dtoClass} dto) {
+        ${jpaEntityIdClass} entityId = ${entityIdInit};
+        logger.debug("partialUpdate({}, {})", entityId, dto);
+        
+        Optional<${jpaEntityClass}> optionalEntity = repository.findById(entityId);
+        if (!optionalEntity.isPresent()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    String.format("${entity.name} with id %s not found", entityId));
+        }
+        
+        // Validate foreign key references for non-null FK fields
+        validateForeignKeyReferences(dto);
+        
+        ${jpaEntityClass} entity = optionalEntity.get();
+        
+        // Use GenericService's updateEntityFromDto which skips nulls
+        updateEntityFromDto(entity, dto);
+        
+        ${jpaEntityClass} updated = repository.save(entity);
+        return entityToDto(updated);
+    }
 
-	// -----------------------------------------------------------------------------------------
-	// Specific "finders" for foreign key relationships
-	// -----------------------------------------------------------------------------------------
+    /**
+     * Deletes an entity by its PK
+     *
+#foreach( $attribute in $entity.keyAttributes )   
+     * @param $attribute.name 
+#end
+     * @throws ResponseStatusException if entity not found (HTTP 404)
+     */
+    public void deleteById($fn.argumentsListWithType($entity.keyAttributes)) {
+        ${jpaEntityIdClass} entityId = ${entityIdInit};
+        logger.debug("deleteById({})", entityId);
+        
+        if (!repository.existsById(entityId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    String.format("${entity.name} with id %s not found", entityId));
+        }
+        
+        repository.deleteById(entityId);
+    }
+
+    /**
+     * Checks if entity exists by ID
+     *
+#foreach( $attribute in $entity.keyAttributes )   
+     * @param $attribute.name 
+#end
+     * @return true if exists, false otherwise
+     */
+    public boolean existsById($fn.argumentsListWithType($entity.keyAttributes)) {
+        ${jpaEntityIdClass} entityId = ${entityIdInit};
+        return repository.existsById(entityId);
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Specific "finders" for foreign key relationships
+    // -----------------------------------------------------------------------------------------
 #foreach( $link in $entity.links )
 #if ( $link.isCardinalityManyToOne() )
 #foreach( $linkAttribute in $link.attributes )
 #set( $fkAttribute = $linkAttribute.originAttribute )
-	
-	/**
-	 * Finds entities by ${link.targetEntity.name} reference
-	 *
-	 * @param ${fkAttribute.name} the ${link.targetEntity.name} ID
-	 * @return list of entities
-	 */
-	public List<${dtoClass}> findBy${fn.capitalize($link.targetEntity.name)}(${fkAttribute.type} ${fkAttribute.name}) {
-		logger.debug("findBy${fn.capitalize($link.targetEntity.name)}({})", ${fkAttribute.name});
-#if( $fkAttribute.name.toLowerCase() == "partid" )
-		List<${jpaEntityClass}> list = repository.findByPartID(${fkAttribute.name});
-#elseif( $fkAttribute.name.toLowerCase() == "componentid" )
-		List<${jpaEntityClass}> list = repository.findByComponentID(${fkAttribute.name});
-#elseif( $fkAttribute.name.toLowerCase() == "accountid" )
-		List<${jpaEntityClass}> list = repository.findByAccountID(${fkAttribute.name});
-#elseif( $fkAttribute.name.toLowerCase() == "pcid" )
-		List<${jpaEntityClass}> list = repository.findByPCID(${fkAttribute.name});
-#else
-		List<${jpaEntityClass}> list = repository.findBy${fn.capitalize($fkAttribute.name)}(${fkAttribute.name});
-#end
-		return entityListToDtoList(list);
-	}
+    
+    /**
+     * Finds entities by ${link.targetEntity.name} reference
+     *
+     * @param ${fkAttribute.name} the ${link.targetEntity.name} ID
+     * @return list of DTOs
+     */
+    public List<${dtoClass}> findBy${fn.capitalize($link.targetEntity.name)}(${fkAttribute.type} ${fkAttribute.name}) {
+        logger.debug("findBy${fn.capitalize($link.targetEntity.name)}({})", ${fkAttribute.name});
+        List<${jpaEntityClass}> list = repository.findBy${fn.capitalize($fkAttribute.name)}(${fkAttribute.name});
+        return entityListToDtoList(list);
+    }
 #end
 #end
 #end
 
-## Special handling for standalone tables like Units
-#if ( $entity.name == "Units" )
-	/**
-	 * Finds units by table name and field name
-	 *
-	 * @param tableName
-	 * @param fieldName
-	 * @return list of matching units
-	 */
-	public List<${dtoClass}> findByTableNameAndFieldName(String tableName, String fieldName) {
-		logger.debug("findByTableNameAndFieldName({}, {})", tableName, fieldName);
-		List<${jpaEntityClass}> list = repository.findByTableNameAndFieldName(tableName, fieldName);
-		return entityListToDtoList(list);
-	}
-	
-	/**
-	 * Finds units by table name
-	 *
-	 * @param tableName
-	 * @return list of matching units
-	 */
-	public List<${dtoClass}> findByTableName(String tableName) {
-		logger.debug("findByTableName({})", tableName);
-		List<${jpaEntityClass}> list = repository.findByTableName(tableName);
-		return entityListToDtoList(list);
-	}
+    // -----------------------------------------------------------------------------------------
+    // DEPRECATED METHODS - Use the improved methods above instead
+    // These are kept for backward compatibility but should not be used in new code
+    // -----------------------------------------------------------------------------------------
+    
+    /*
+    @Deprecated
+    public void save($fn.argumentsListWithType($entity.keyAttributes), ${dtoClass} dto) {
+        // DEPRECATED: This method has been replaced by update() which returns the updated entity
+        // and provides better error handling with exceptions
+        ${jpaEntityIdClass} entityId = ${entityIdInit};
+        logger.warn("DEPRECATED: save() called with entityId: {}. Use update() instead.", entityId);
+        
+        validateForeignKeyReferences(dto);
+        
+        // Force PK in DTO
+#foreach( $attribute in $entity.keyAttributes )
+        dto.${attribute.setter}(${attribute.name});
 #end
+        
+        repository.save(dtoToEntity(dto));
+    }
+    */
 
-/***
-	// Example custom finders - uncomment and modify as needed
-	public List<${dtoClass}> findByTitle(String title) {
-		logger.debug("findByTitle({})", title);
-		List<${jpaEntityClass}> list = repository.findByTitleContaining(title);
-		return entityListToDtoList(list);
-	}
+    /* ------------------------------------------------------------------
+     * The full `update()` method was intentionally moved to the end of
+     * the file and commented out as requested. Keep it commented while
+     * preserving the implementation for easy restoration or reference.
+     * ------------------------------------------------------------------ */
 
-	public List<${dtoClass}> findByPrice(BigDecimal price) {
-		logger.debug("findByPrice({})", price);
-		List<${jpaEntityClass}> list = repository.findByPrice(price);
-		return entityListToDtoList(list);
-	}
-***/
+   
+    /**
+     * Updates the given entity if it exists <br>
+     * Validates foreign key references before updating
+     *
+     * @param dto the DTO to update
+     * @return the updated DTO
+     * @throws ResponseStatusException if entity not found (404) or FK validation fails (400)
+     */
+ /*
+    public ${dtoClass} update(${dtoClass} dto) {
+        logger.debug("update({})", dto);
+        
+        // Validate DTO
+        validateDto(dto);
+        
+        ${jpaEntityIdClass} entityId = getEntityId(dto);
+        
+        // Check if exists
+        if (!repository.existsById(entityId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    String.format("${entity.name} with id %s not found", entityId));
+        }
+        
+        // Validate foreign key references AFTER confirming entity exists
+        validateForeignKeyReferences(dto);
+        
+        ${jpaEntityClass} entity = dtoToEntity(dto);
+        ${jpaEntityClass} updated = repository.save(entity);
+        return entityToDto(updated);
+    }
+    */
 }

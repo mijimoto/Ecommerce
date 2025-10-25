@@ -1,4 +1,4 @@
-package ${ROOT_PKG}.common.rest.services;
+package com.mijimoto.ECommerce.common.rest.services;
 
 import java.util.LinkedList;
 import java.util.List;
