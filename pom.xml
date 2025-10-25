@@ -20,6 +20,9 @@
 
   <properties>
     <java.version>21</java.version>
+    <!-- pin plugin versions -->
+    <maven.compiler.plugin.version>3.11.0</maven.compiler.plugin.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
   <dependencies>
@@ -72,12 +75,13 @@
       <version>8.6.0</version>
     </dependency>
 
-    <!-- Lombok -->
+    <!-- Lombok: compile-time only (provided) -->
     <dependency>
       <groupId>org.projectlombok</groupId>
       <artifactId>lombok</artifactId>
-      <version>1.18.26</version>
+      <version>1.18.42</version>
       <scope>provided</scope>
+      <optional>true</optional>
     </dependency>
 
     <!-- Devtools and testing -->
@@ -105,18 +109,21 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
+        <version>${maven.compiler.plugin.version}</version>
         <configuration>
           <release>${java.version}</release>
+          <fork>true</fork>
           <annotationProcessorPaths>
             <path>
               <groupId>org.projectlombok</groupId>
               <artifactId>lombok</artifactId>
-              <version>1.18.26</version>
+              <version>1.18.42</version>
             </path>
           </annotationProcessorPaths>
         </configuration>
       </plugin>
 
+      <!-- Spring Boot plugin -->
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
@@ -128,6 +135,29 @@
             </exclude>
           </excludes>
         </configuration>
+      </plugin>
+
+      <!-- (Optional) Enforce Java version at build time -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <version>3.3.0</version>
+        <executions>
+          <execution>
+            <id>enforce-java</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <requireJavaVersion>
+                  <version>${java.version}</version>
+                </requireJavaVersion>
+              </rules>
+              <fail>true</fail>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>
