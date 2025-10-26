@@ -31,6 +31,15 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         JwtAuthFilter jwtFilter = new JwtAuthFilter(jwtService, redisTokenService, usersRepo);
 
+        // Allow swagger and public endpoints
+        String[] SWAGGER_WHITELIST = {
+            "/v3/api-docs/**",
+            "/swagger-ui/**",
+            "/swagger-ui.html",
+            "/v3/api-docs.yaml",
+            "/webjars/**"
+        };
+
         http
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session
@@ -38,6 +47,7 @@ public class SecurityConfig {
             )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**", "/health").permitAll()
+                .requestMatchers(SWAGGER_WHITELIST).permitAll() // ✅ allow Swagger access
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
@@ -50,7 +60,7 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    // Also expose the concrete type in case other classes autowire BCryptPasswordEncoder directly
+    // Optional convenience bean
     @Bean
     public BCryptPasswordEncoder bCryptPasswordEncoder() {
         return (BCryptPasswordEncoder) passwordEncoder();

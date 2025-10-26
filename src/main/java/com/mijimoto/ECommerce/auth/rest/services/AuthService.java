@@ -1,23 +1,21 @@
 package com.mijimoto.ECommerce.auth.rest.services;
 
-import com.mijimoto.ECommerce.auth.persistence.entities.UserSessions;
-import com.mijimoto.ECommerce.auth.persistence.entities.UserTokens;
-import com.mijimoto.ECommerce.auth.persistence.repositories.UserSessionsRepository;
-import com.mijimoto.ECommerce.auth.persistence.repositories.UserTokensRepository;
+import com.mijimoto.ECommerce.auth.persistence.entities.*;
+import com.mijimoto.ECommerce.auth.persistence.repositories.*;
 import com.mijimoto.ECommerce.user.persistence.entities.Users;
 import com.mijimoto.ECommerce.user.persistence.repositories.UsersRepository;
 import com.mijimoto.ECommerce.auth.util.CryptoUtils;
-import com.mijimoto.ECommerce.auth.rest.dto.LoginResponseDTO;
-import com.mijimoto.ECommerce.auth.rest.dto.LoginRequestDTO;
-import com.mijimoto.ECommerce.auth.rest.dto.RefreshRequestDTO;
-import com.mijimoto.ECommerce.auth.services.JwtService;
-import com.mijimoto.ECommerce.auth.services.RedisTokenService;
+import com.mijimoto.ECommerce.auth.rest.dto.*;
+import com.mijimoto.ECommerce.auth.services.*;
+import com.mijimoto.ECommerce.common.mail.MailService;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.Optional;
@@ -33,18 +31,25 @@ public class AuthService {
     private final RedisTokenService redisTokenService;
     private final CryptoUtils crypto;
     private final BCryptPasswordEncoder passwordEncoder;
+    private final MailService mailService;
+    private final StringRedisTemplate redis;
+
     private final long accessTtlSeconds;
     private final long refreshTtlDays;
 
-    public AuthService(UsersRepository usersRepo,
-                       UserSessionsRepository sessionsRepo,
-                       UserTokensRepository tokensRepo,
-                       JwtService jwtService,
-                       RedisTokenService redisTokenService,
-                       CryptoUtils crypto,
-                       BCryptPasswordEncoder passwordEncoder,
-                       @Value("${app.jwt.access-token-expiry-seconds}") long accessTtlSeconds,
-                       @Value("${app.jwt.refresh-token-expiry-days}") long refreshTtlDays) {
+    public AuthService(
+            UsersRepository usersRepo,
+            UserSessionsRepository sessionsRepo,
+            UserTokensRepository tokensRepo,
+            JwtService jwtService,
+            RedisTokenService redisTokenService,
+            CryptoUtils crypto,
+            BCryptPasswordEncoder passwordEncoder,
+            MailService mailService,
+            StringRedisTemplate redis,
+            @Value("${app.jwt.access-token-expiry-seconds}") long accessTtlSeconds,
+            @Value("${app.jwt.refresh-token-expiry-days}") long refreshTtlDays) {
+
         this.usersRepo = usersRepo;
         this.sessionsRepo = sessionsRepo;
         this.tokensRepo = tokensRepo;
@@ -52,17 +57,21 @@ public class AuthService {
         this.redisTokenService = redisTokenService;
         this.crypto = crypto;
         this.passwordEncoder = passwordEncoder;
+        this.mailService = mailService;
+        this.redis = redis;
         this.accessTtlSeconds = accessTtlSeconds;
         this.refreshTtlDays = refreshTtlDays;
     }
 
     @Transactional
     public LoginResponseDTO login(LoginRequestDTO req) {
-        Users u = usersRepo.findByEmail(req.getEmail()).orElseThrow(() -> new RuntimeException("Invalid creds"));
-        if (u.getIsActive() == null || !u.getIsActive()) throw new RuntimeException("User inactive");
-        if (!passwordEncoder.matches(req.getPassword(), u.getPasswordHash())) throw new RuntimeException("Invalid creds");
+        Users u = usersRepo.findByEmail(req.getEmail())
+                .orElseThrow(() -> new RuntimeException("Invalid credentials"));
+        if (!Boolean.TRUE.equals(u.getIsActive()))
+            throw new RuntimeException("Please verify your email first");
+        if (!passwordEncoder.matches(req.getPassword(), u.getPasswordHash()))
+            throw new RuntimeException("Invalid credentials");
 
-        // create session
         UserSessions s = new UserSessions();
         s.setUsers(u);
         s.setSessionUuid(UUID.randomUUID().toString());
@@ -75,17 +84,12 @@ public class AuthService {
         s.setExpiresAt(Date.from(Instant.now().plusSeconds(refreshTtlDays * 86400)));
         sessionsRepo.save(s);
 
-        // create access token and store jti in redis
         var signed = jwtService.generateAccessToken(u.getId(), s.getSessionUuid());
-        String jti = signed.jti();
-        // store small payload
-        String payload = String.format("{\"uid\":%d,\"session\":\"%s\"}", u.getId(), s.getSessionUuid());
-        redisTokenService.storeJti(jti, payload, accessTtlSeconds);
+        redisTokenService.storeJti(signed.jti(),
+                String.format("{\"uid\":%d,\"session\":\"%s\"}", u.getId(), s.getSessionUuid()), accessTtlSeconds);
 
-        // create refresh token raw + hash
         String refreshRaw = crypto.generateRefreshTokenRaw(48);
         String refreshHash = crypto.hmacSha256Hex(refreshRaw);
-
         UserTokens tok = new UserTokens();
         tok.setUsers(u);
         tok.setUserSessions(s);
@@ -96,12 +100,61 @@ public class AuthService {
         tok.setExpiresAt(Date.from(Instant.now().plusSeconds(refreshTtlDays * 86400)));
         tokensRepo.save(tok);
 
-        LoginResponseDTO resp = new LoginResponseDTO();
-        resp.setAccessToken(signed.token());
-        resp.setExpiresAt(signed.expiresAt());
-        resp.setRefreshToken(refreshRaw);
-        resp.setSessionUuid(s.getSessionUuid());
-        return resp;
+        return new LoginResponseDTO(signed.token(), refreshRaw, signed.expiresAt(), s.getSessionUuid());
+    }
+
+
+
+    public void sendVerificationEmail(String email) {
+        Users user = usersRepo.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        if (Boolean.TRUE.equals(user.getIsActive()))
+            throw new RuntimeException("User already verified");
+
+        String code = UUID.randomUUID().toString().replace("-", "");
+        redis.opsForValue().set("verify:" + code, email, Duration.ofMinutes(15));
+
+        String verifyUrl = "http://localhost:8080/api/auth/verify-email?code=" + code;
+        mailService.sendMail(email, "Verify your account", "Click here to verify: " + verifyUrl);
+    }
+
+    @Transactional
+    public void verifyEmail(String code) {
+        String email = redis.opsForValue().get("verify:" + code);
+        if (email == null) throw new RuntimeException("Invalid or expired verification link");
+
+        Users user = usersRepo.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user.setIsActive(true);
+        user.setUpdatedAt(Date.from(Instant.now()));
+        usersRepo.save(user);
+
+        redis.delete("verify:" + code);
+    }
+
+    public void forgotPassword(String email) {
+        Users user = usersRepo.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        String code = UUID.randomUUID().toString().replace("-", "");
+        redis.opsForValue().set("reset:" + code, email, Duration.ofMinutes(10));
+
+        String resetUrl = "http://localhost:8080/api/auth/reset-password?code=" + code;
+        mailService.sendMail(email, "Password reset", "Click to reset your password: " + resetUrl);
+    }
+
+    @Transactional
+    public void resetPassword(String code, String newPassword) {
+        String email = redis.opsForValue().get("reset:" + code);
+        if (email == null) throw new RuntimeException("Invalid or expired reset token");
+
+        Users user = usersRepo.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setUpdatedAt(Date.from(Instant.now()));
+        usersRepo.save(user);
+        redis.delete("reset:" + code);
     }
 
     @Transactional
@@ -152,7 +205,7 @@ public class AuthService {
         if (accessToken != null && accessToken.startsWith("Bearer ")) accessToken = accessToken.substring(7);
         try {
             if (accessToken != null) {
-                var claims = jwtService.parseToken(accessToken).getBody();
+                var claims = jwtService.parseToken(accessToken).getPayload();
                 String jti = claims.getId();
                 if (jti != null) redisTokenService.deleteJti(jti);
             }
