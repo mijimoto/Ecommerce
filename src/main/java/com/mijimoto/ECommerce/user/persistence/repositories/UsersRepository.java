@@ -4,6 +4,8 @@
  */
 package com.mijimoto.ECommerce.user.persistence.repositories;
 
+import java.util.Optional;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import com.mijimoto.ECommerce.user.persistence.entities.Users;
@@ -23,6 +25,8 @@ import com.mijimoto.ECommerce.user.persistence.entities.Users;
  * @author Telosys
  */
 public interface UsersRepository extends JpaRepository<Users, Integer> {
+
+	Optional<Users> findByEmail(String email);
 
     // -- Add your custom finder methods below --
 

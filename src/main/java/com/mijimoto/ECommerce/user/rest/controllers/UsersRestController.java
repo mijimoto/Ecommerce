@@ -1,10 +1,7 @@
-
 package com.mijimoto.ECommerce.user.rest.controllers;
 
 import java.util.List;
-
 import jakarta.validation.Valid;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 
 import com.mijimoto.ECommerce.user.rest.dto.UsersDTO;
 import com.mijimoto.ECommerce.user.rest.services.UsersService;
-
 
 /**
  * REST Controller for Users
@@ -29,9 +25,8 @@ import com.mijimoto.ECommerce.user.rest.services.UsersService;
 @RestController
 @RequestMapping(value = "/api/v1/users", produces = MediaType.APPLICATION_JSON_VALUE)
 public class UsersRestController {
-
     private static final Logger logger = LoggerFactory.getLogger(UsersRestController.class);
-
+    
     private final UsersService service;
 
     @Autowired
@@ -48,6 +43,10 @@ public class UsersRestController {
     public ResponseEntity<List<UsersDTO>> findAll() {
         logger.debug("GET - findAll");
         List<UsersDTO> list = service.findAll();
+        
+        // Remove password hashes from response for security
+        list.forEach(dto -> dto.setPasswordHash(null));
+        
         return ResponseEntity.ok(list);
     }
 
@@ -64,6 +63,8 @@ public class UsersRestController {
         UsersDTO dto = service.findById(id);
         
         if (dto != null) {
+            // Remove password hash from response for security
+            dto.setPasswordHash(null);
             return ResponseEntity.ok(dto);
         } else {
             return ResponseEntity.notFound().build();
@@ -71,16 +72,20 @@ public class UsersRestController {
     }
 
     /**
-     * POST - Create new Users
+     * POST - Register new user
      * 
-     * @param usersDTO the DTO to create
-     * @return 201 Created with the created DTO, or 400/422 on validation error
+     * @param usersDTO the DTO to register (passwordHash field contains plain password)
+     * @return 201 Created with the created DTO, or 400/409 on error
      */
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<UsersDTO> create(@Valid @RequestBody UsersDTO usersDTO) {
-        logger.debug("POST - create: {}", usersDTO);
+    public ResponseEntity<UsersDTO> register(@Valid @RequestBody UsersDTO usersDTO) {
+        logger.debug("POST - register: {}", usersDTO.getEmail());
         
-        UsersDTO created = service.create(usersDTO);
+        UsersDTO created = service.register(usersDTO);
+        
+        // Remove password hash from response for security
+        created.setPasswordHash(null);
+        
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
@@ -99,6 +104,10 @@ public class UsersRestController {
         logger.debug("PATCH - partialUpdate: id={}, dto={}", id, usersDTO);
         
         UsersDTO updated = service.partialUpdate(id, usersDTO);
+        
+        // Remove password hash from response for security
+        updated.setPasswordHash(null);
+        
         return ResponseEntity.ok(updated);
     }
 
@@ -115,5 +124,4 @@ public class UsersRestController {
         service.deleteById(id);
         return ResponseEntity.noContent().build();
     }
-
 }

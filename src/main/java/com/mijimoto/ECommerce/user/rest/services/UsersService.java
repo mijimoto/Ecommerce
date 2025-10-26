@@ -4,12 +4,14 @@
  */
 package com.mijimoto.ECommerce.user.rest.services;
 
+import java.time.Instant;
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -38,16 +40,18 @@ public class UsersService extends GenericService<Users, UsersDTO> {
     private static final Logger logger = LoggerFactory.getLogger(UsersService.class);
 
     private final UsersRepository repository;
-
+    private final BCryptPasswordEncoder passwordEncoder;
 
     /**
      * Constructor (usable for Dependency Injection)
      *
      * @param repository the repository to be injected
+     * @param passwordEncoder the password encoder for hashing passwords
      */
-    public UsersService(UsersRepository repository) {
+    public UsersService(UsersRepository repository, BCryptPasswordEncoder passwordEncoder) {
         super(Users.class, UsersDTO.class);
         this.repository = repository;
+        this.passwordEncoder = passwordEncoder;
     }
     
     /**
@@ -112,25 +116,55 @@ public class UsersService extends GenericService<Users, UsersDTO> {
     }
 
     /**
-     * Creates the given entity <br>
-     * Validates foreign key references before creating
-     *
-     * @param dto the DTO to create
-     * @return the created DTO with generated ID (if applicable)
-     * @throws ResponseStatusException if FK validation fails (HTTP 400)
+     * Registers a new user with password hashing and validation
+     * 
+     * @param dto the DTO containing email, passwordHash (plain text password), fullName, etc.
+     * @return the created DTO with generated ID
+     * @throws ResponseStatusException if email already exists (409) or validation fails (400)
      */
-    public UsersDTO create(UsersDTO dto) {
-        logger.debug("create({})", dto);
+    public UsersDTO register(UsersDTO dto) {
+        logger.debug("register() - email: {}", dto.getEmail());
+        
+        // Validate required fields
+        if (dto.getEmail() == null || dto.getEmail().trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email is required");
+        }
+        if (dto.getPasswordHash() == null || dto.getPasswordHash().trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password is required");
+        }
+        
+        // Check if email already exists
+        Optional<Users> existing = repository.findByEmail(dto.getEmail());
+        if (existing.isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, 
+                    "User with email " + dto.getEmail() + " already exists");
+        }
+        
+        // Hash the password
+        String hashedPassword = passwordEncoder.encode(dto.getPasswordHash());
+        dto.setPasswordHash(hashedPassword);
+        
+        // Set default values
+        if (dto.getIsActive() == null) {
+            dto.setIsActive(true);
+        }
+        
+        Instant now = Instant.now();
+        dto.setCreatedAt(Date.from(now));
+        dto.setUpdatedAt(Date.from(now));
         
         // Validate DTO
         validateDto(dto);
         
-        // Validate foreign key references FIRST
+        // Validate foreign key references
         validateForeignKeyReferences(dto);
         
-        // Auto-generated Primary Key - always create
+        // Create entity
         Users entity = dtoToEntity(dto);
         Users saved = repository.save(entity);
+        
+        logger.info("User registered successfully - id: {}, email: {}", saved.getId(), saved.getEmail());
+        
         return entityToDto(saved);
     }
 
@@ -154,10 +188,21 @@ public class UsersService extends GenericService<Users, UsersDTO> {
                     String.format("Users with id %s not found", entityId));
         }
         
+        // If password is being updated, hash it
+        if (dto.getPasswordHash() != null && !dto.getPasswordHash().trim().isEmpty()) {
+            // Check if it's already hashed (BCrypt hashes start with $2a$, $2b$, or $2y$)
+            if (!dto.getPasswordHash().matches("^\\$2[aby]\\$.{56}$")) {
+                dto.setPasswordHash(passwordEncoder.encode(dto.getPasswordHash()));
+            }
+        }
+        
         // Validate foreign key references for non-null FK fields
         validateForeignKeyReferences(dto);
         
         Users entity = optionalEntity.get();
+        
+        // Update timestamp
+        dto.setUpdatedAt(Date.from(Instant.now()));
         
         // Use GenericService's updateEntityFromDto which skips nulls
         updateEntityFromDto(entity, dto);
