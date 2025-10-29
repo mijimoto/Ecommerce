@@ -22,7 +22,6 @@ import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 public class AuthService {
@@ -69,16 +68,6 @@ public class AuthService {
         this.refreshTtlDays = refreshTtlDays;
     }
 
-    /**
-     * Helper method to fetch user roles
-     */
-    private List<String> getUserRoles(Integer userId) {
-        return userRolesRepo.findByUsersId(userId)
-                .stream()
-                .map(ur -> ur.getRoles().getRoleName())
-                .collect(Collectors.toList());
-    }
-
     @Transactional
     public LoginResponseDTO login(LoginRequestDTO req) {
         Users u = usersRepo.findByEmail(req.getEmail())
@@ -100,18 +89,21 @@ public class AuthService {
         s.setExpiresAt(Date.from(Instant.now().plusSeconds(refreshTtlDays * 86400)));
         sessionsRepo.save(s);
 
-        // Fetch user roles
-        List<String> roles = getUserRoles(u.getId());
+        // Fetch user roles directly using Lombok-generated getters
+        List<String> roles = userRolesRepo.findByUsersId(u.getId())
+                .stream()
+                .map(ur -> ur.getRoles().getName()) // use Lombok-generated getName()
+                .toList();
 
         // Generate access token with roles
         var signed = jwtService.generateAccessToken(u.getId(), s.getSessionUuid(), roles);
-        
+
         // Store in Redis with roles included
         String payload = String.format(
-            "{\"uid\":%d,\"session\":\"%s\",\"roles\":%s}", 
-            u.getId(), 
+            "{\"uid\":%d,\"session\":\"%s\",\"roles\":%s}",
+            u.getId(),
             s.getSessionUuid(),
-            roles.stream().map(r -> "\"" + r + "\"").collect(Collectors.joining(",", "[", "]"))
+            roles.stream().map(r -> "\"" + r + "\"").collect(java.util.stream.Collectors.joining(",", "[", "]"))
         );
         redisTokenService.storeJti(signed.jti(), payload, accessTtlSeconds);
 
@@ -212,17 +204,20 @@ public class AuthService {
         newTok.setExpiresAt(Date.from(Instant.now().plusSeconds(refreshTtlDays * 86400)));
         tokensRepo.save(newTok);
 
-        // Fetch user roles
-        List<String> roles = getUserRoles(u.getId());
+        // Fetch user roles directly using Lombok-generated getters
+        List<String> roles = userRolesRepo.findByUsersId(u.getId())
+                .stream()
+                .map(ur -> ur.getRoles().getName()) // use Lombok-generated getName()
+                .toList();
 
         // Generate new access token with roles
         var signed = jwtService.generateAccessToken(u.getId(), session.getSessionUuid(), roles);
-        
+
         String payload = String.format(
-            "{\"uid\":%d,\"session\":\"%s\",\"roles\":%s}", 
-            u.getId(), 
+            "{\"uid\":%d,\"session\":\"%s\",\"roles\":%s}",
+            u.getId(),
             session.getSessionUuid(),
-            roles.stream().map(r -> "\"" + r + "\"").collect(Collectors.joining(",", "[", "]"))
+            roles.stream().map(r -> "\"" + r + "\"").collect(java.util.stream.Collectors.joining(",", "[", "]"))
         );
         redisTokenService.storeJti(signed.jti(), payload, accessTtlSeconds);
 
