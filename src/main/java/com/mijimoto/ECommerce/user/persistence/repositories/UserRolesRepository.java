@@ -4,6 +4,8 @@
  */
 package com.mijimoto.ECommerce.user.persistence.repositories;
 
+import java.util.List;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import com.mijimoto.ECommerce.user.persistence.entities.UserRoles;
@@ -23,7 +25,19 @@ import com.mijimoto.ECommerce.user.persistence.entities.UserRoles;
  * @author Telosys
  */
 public interface UserRolesRepository extends JpaRepository<UserRoles, Integer> {
-
+    /**
+     * Find all user roles by user ID
+     * @param userId User ID
+     * @return List of UserRoles
+     */
+    List<UserRoles> findByUsersId(Integer userId);
+    
+    /**
+     * Find all user roles by role ID
+     * @param roleId Role ID
+     * @return List of UserRoles
+     */
+    List<UserRoles> findByRolesId(Integer roleId);
     // -- Add your custom finder methods below --
 
     // Example: Find by a String field

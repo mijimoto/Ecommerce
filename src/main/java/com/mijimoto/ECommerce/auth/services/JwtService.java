@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import javax.crypto.SecretKey;
 import java.time.Instant;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -27,7 +28,13 @@ public class JwtService {
 
     public record SignedToken(String token, String jti, Date expiresAt) {}
 
-    public SignedToken generateAccessToken(Integer userId, String sessionUuid) {
+    /**
+     * Generate access token with user roles
+     * @param userId User ID
+     * @param sessionUuid Session UUID
+     * @param roles List of role names (e.g., ["ADMIN", "USER"])
+     */
+    public SignedToken generateAccessToken(Integer userId, String sessionUuid, List<String> roles) {
         String jti = UUID.randomUUID().toString();
         Instant now = Instant.now();
         Date iat = Date.from(now);
@@ -40,6 +47,7 @@ public class JwtService {
                 .issuedAt(iat)          
                 .expiration(exp)         
                 .claim("session_uuid", sessionUuid)
+                .claim("roles", roles)  // Add roles to JWT
                 .signWith(signingKey)   
                 .compact();
 
@@ -51,5 +59,17 @@ public class JwtService {
                    .verifyWith(signingKey)      
                    .build()
                    .parseSignedClaims(token);  
+    }
+
+    /**
+     * Extract roles from JWT claims
+     */
+    @SuppressWarnings("unchecked")
+    public List<String> extractRoles(Claims claims) {
+        Object rolesObj = claims.get("roles");
+        if (rolesObj instanceof List<?>) {
+            return (List<String>) rolesObj;
+        }
+        return List.of();
     }
 }

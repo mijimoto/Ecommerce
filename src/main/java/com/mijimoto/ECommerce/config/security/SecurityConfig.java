@@ -46,6 +46,7 @@ public class SecurityConfig {
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
             .authorizeHttpRequests(auth -> auth
+            		.requestMatchers("/api/v1/**").permitAll()
                 .requestMatchers("/api/auth/**", "/health").permitAll()
                 .requestMatchers(SWAGGER_WHITELIST).permitAll() // ✅ allow Swagger access
                 .anyRequest().authenticated()

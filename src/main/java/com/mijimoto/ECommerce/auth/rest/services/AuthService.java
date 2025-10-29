@@ -4,6 +4,7 @@ import com.mijimoto.ECommerce.auth.persistence.entities.*;
 import com.mijimoto.ECommerce.auth.persistence.repositories.*;
 import com.mijimoto.ECommerce.user.persistence.entities.Users;
 import com.mijimoto.ECommerce.user.persistence.repositories.UsersRepository;
+import com.mijimoto.ECommerce.user.persistence.repositories.UserRolesRepository;
 import com.mijimoto.ECommerce.auth.util.CryptoUtils;
 import com.mijimoto.ECommerce.auth.rest.dto.*;
 import com.mijimoto.ECommerce.auth.services.*;
@@ -18,8 +19,10 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class AuthService {
@@ -27,6 +30,7 @@ public class AuthService {
     private final UsersRepository usersRepo;
     private final UserSessionsRepository sessionsRepo;
     private final UserTokensRepository tokensRepo;
+    private final UserRolesRepository userRolesRepo;
     private final JwtService jwtService;
     private final RedisTokenService redisTokenService;
     private final CryptoUtils crypto;
@@ -41,6 +45,7 @@ public class AuthService {
             UsersRepository usersRepo,
             UserSessionsRepository sessionsRepo,
             UserTokensRepository tokensRepo,
+            UserRolesRepository userRolesRepo,
             JwtService jwtService,
             RedisTokenService redisTokenService,
             CryptoUtils crypto,
@@ -53,6 +58,7 @@ public class AuthService {
         this.usersRepo = usersRepo;
         this.sessionsRepo = sessionsRepo;
         this.tokensRepo = tokensRepo;
+        this.userRolesRepo = userRolesRepo;
         this.jwtService = jwtService;
         this.redisTokenService = redisTokenService;
         this.crypto = crypto;
@@ -61,6 +67,16 @@ public class AuthService {
         this.redis = redis;
         this.accessTtlSeconds = accessTtlSeconds;
         this.refreshTtlDays = refreshTtlDays;
+    }
+
+    /**
+     * Helper method to fetch user roles
+     */
+    private List<String> getUserRoles(Integer userId) {
+        return userRolesRepo.findByUsersId(userId)
+                .stream()
+                .map(ur -> ur.getRoles().getRoleName())
+                .collect(Collectors.toList());
     }
 
     @Transactional
@@ -84,9 +100,20 @@ public class AuthService {
         s.setExpiresAt(Date.from(Instant.now().plusSeconds(refreshTtlDays * 86400)));
         sessionsRepo.save(s);
 
-        var signed = jwtService.generateAccessToken(u.getId(), s.getSessionUuid());
-        redisTokenService.storeJti(signed.jti(),
-                String.format("{\"uid\":%d,\"session\":\"%s\"}", u.getId(), s.getSessionUuid()), accessTtlSeconds);
+        // Fetch user roles
+        List<String> roles = getUserRoles(u.getId());
+
+        // Generate access token with roles
+        var signed = jwtService.generateAccessToken(u.getId(), s.getSessionUuid(), roles);
+        
+        // Store in Redis with roles included
+        String payload = String.format(
+            "{\"uid\":%d,\"session\":\"%s\",\"roles\":%s}", 
+            u.getId(), 
+            s.getSessionUuid(),
+            roles.stream().map(r -> "\"" + r + "\"").collect(Collectors.joining(",", "[", "]"))
+        );
+        redisTokenService.storeJti(signed.jti(), payload, accessTtlSeconds);
 
         String refreshRaw = crypto.generateRefreshTokenRaw(48);
         String refreshHash = crypto.hmacSha256Hex(refreshRaw);
@@ -102,8 +129,6 @@ public class AuthService {
 
         return new LoginResponseDTO(signed.token(), refreshRaw, signed.expiresAt(), s.getSessionUuid());
     }
-
-
 
     public void sendVerificationEmail(String email) {
         Users user = usersRepo.findByEmail(email)
@@ -159,7 +184,6 @@ public class AuthService {
 
     @Transactional
     public LoginResponseDTO refresh(RefreshRequestDTO req) {
-        // find token by hash
         String raw = req.getRefreshToken();
         String hash = crypto.hmacSha256Hex(raw);
         Optional<UserTokens> t = tokensRepo.findByTokenHash(hash);
@@ -170,11 +194,12 @@ public class AuthService {
         Users u = token.getUsers();
         UserSessions session = token.getUserSessions();
 
-        // rotate: revoke old token and create a new one
+        // Revoke old token
         token.setIsRevoked(true);
         token.setRevokedAt(Date.from(Instant.now()));
         tokensRepo.save(token);
 
+        // Create new refresh token
         String newRefreshRaw = crypto.generateRefreshTokenRaw(48);
         String newHash = crypto.hmacSha256Hex(newRefreshRaw);
         UserTokens newTok = new UserTokens();
@@ -187,9 +212,19 @@ public class AuthService {
         newTok.setExpiresAt(Date.from(Instant.now().plusSeconds(refreshTtlDays * 86400)));
         tokensRepo.save(newTok);
 
-        // generate new access token
-        var signed = jwtService.generateAccessToken(u.getId(), session.getSessionUuid());
-        redisTokenService.storeJti(signed.jti(), String.format("{\"uid\":%d,\"session\":\"%s\"}", u.getId(), session.getSessionUuid()), accessTtlSeconds);
+        // Fetch user roles
+        List<String> roles = getUserRoles(u.getId());
+
+        // Generate new access token with roles
+        var signed = jwtService.generateAccessToken(u.getId(), session.getSessionUuid(), roles);
+        
+        String payload = String.format(
+            "{\"uid\":%d,\"session\":\"%s\",\"roles\":%s}", 
+            u.getId(), 
+            session.getSessionUuid(),
+            roles.stream().map(r -> "\"" + r + "\"").collect(Collectors.joining(",", "[", "]"))
+        );
+        redisTokenService.storeJti(signed.jti(), payload, accessTtlSeconds);
 
         LoginResponseDTO resp = new LoginResponseDTO();
         resp.setAccessToken(signed.token());
@@ -201,7 +236,6 @@ public class AuthService {
 
     @Transactional
     public void logout(String accessToken, String refreshToken) {
-        // delete access jti if present
         if (accessToken != null && accessToken.startsWith("Bearer ")) accessToken = accessToken.substring(7);
         try {
             if (accessToken != null) {
